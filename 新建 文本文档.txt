@@ -1,0 +1,5 @@
+C:\Users\Administrator>h:
+
+H:\>cd H:\桌面\5G分流系统开发
+
+H:\桌面\5G分流系统开发>streamlit run app.py

@@ -1,0 +1,7 @@
+# 忽略Python的缓存文件
+__pycache__/
+*.pyc
+
+# 忽略操作系统文件
+.DS_Store
+Thumbs.db
