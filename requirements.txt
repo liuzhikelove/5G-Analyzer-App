@@ -2,7 +2,5 @@ pandas
 openpyxl
 haversine
 streamlit
-pydeck
 pyecharts
-coord-convert
 scipy
