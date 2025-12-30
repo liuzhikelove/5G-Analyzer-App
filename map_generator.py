@@ -1,4 +1,4 @@
-# ===== File: map_generator.py (最终修正版) =====
+# ===== File: map_generator.py (最终修正版 v2) =====
 
 import pandas as pd
 from pyecharts import options as opts
@@ -21,11 +21,11 @@ def convert_coords_for_baidu(_df):
     if df.empty:
         return pd.DataFrame()
     
-    # --- [核心修复-1] 采用两步转换：WGS-84 -> GCJ-02 -> BD-09 ---
+    # --- [核心修复] 使用正确的函数名：wgs_to_gcj 和 gcj_to_bd ---
     converted_coords = []
     for lon, lat in zip(df['经度'], df['纬度']):
-        gcj02_lon, gcj02_lat = cc.wgs84_to_gcj02(lon, lat)
-        bd09_lon, bd09_lat = cc.gcj02_to_bd09(gcj02_lon, gcj02_lat)
+        gcj02_lon, gcj02_lat = cc.wgs_to_gcj(lon, lat)
+        bd09_lon, bd09_lat = cc.gcj_to_bd(gcj02_lon, gcj02_lat)
         converted_coords.append((bd09_lon, bd09_lat))
 
     df['b_lon'] = [coord[0] for coord in converted_coords]
@@ -50,7 +50,6 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         matched = False
         for key in categories.keys():
             if key in result_str:
-                # --- [核心修复-2] 使用标准的列表格式，而不是旧的Chart3DPoint ---
                 categories[key].append([row['b_lon'], row['b_lat'], row['小区名称']])
                 matched = True
                 break
@@ -95,7 +94,7 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         legend_opts=opts.LegendOpts(orient="vertical", pos_top="10%", pos_left="2%"),
         tooltip_opts=opts.TooltipOpts(
             trigger="item", 
-            formatter=lambda params: f"{params.seriesName}<br/>{params.data.value[2]}"
+            formatter=lambda params: f"{params.seriesName}<br/>{params.data.value[2]}" if params.data else ""
         ),
     )
 
