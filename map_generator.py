@@ -1,4 +1,4 @@
-# ===== File: map_generator.py (最终健壮版) =====
+# ===== File: map_generator.py (最终稳定算法版) =====
 
 import pandas as pd
 from pyecharts import options as opts
@@ -7,43 +7,56 @@ from pyecharts.globals import BMapType
 import streamlit as st
 import math
 
-# --- 内置坐标转换算法 ---
-x_pi = 3.14159265358979324 * 3000.0 / 180.0
-pi = 3.1415926535897932384626
-a = 6378245.0
-ee = 0.00669342162296594323
+# --- [核心修改] 使用一个更健壮和标准的坐标转换算法实现 ---
+class CoordinateConverter:
+    def __init__(self):
+        self.x_pi = 3.14159265358979324 * 3000.0 / 180.0
+        self.pi = 3.1415926535897932384626
+        self.a = 6378245.0
+        self.ee = 0.00669342162296594323
 
-def _transform_lat(lng, lat):
-    ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(math.fabs(lng))
-    ret += (20.0 * math.sin(6.0 * lng * pi) + 20.0 * math.sin(2.0 * lng * pi)) * 2.0 / 3.0
-    ret += (20.0 * math.sin(lat * pi) + 40.0 * math.sin(lat / 3.0 * pi)) * 2.0 / 3.0
-    ret += (160.0 * math.sin(lat / 12.0 * pi) + 320 * math.sin(lat * pi / 30.0)) * 2.0 / 3.0
-    return ret
+    def _transform_lat(self, lng, lat):
+        ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
+        ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0
+        ret += (20.0 * math.sin(lat * self.pi) + 40.0 * math.sin(lat / 3.0 * self.pi)) * 2.0 / 3.0
+        ret += (160.0 * math.sin(lat / 12.0 * self.pi) + 320 * math.sin(lat * self.pi / 30.0)) * 2.0 / 3.0
+        return ret
 
-def _transform_lng(lng, lat):
-    ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(math.fabs(lng))
-    ret += (20.0 * math.sin(6.0 * lng * pi) + 20.0 * math.sin(2.0 * lng * pi)) * 2.0 / 3.0
-    ret += (20.0 * math.sin(lng * pi) + 40.0 * math.sin(lng / 3.0 * pi)) * 2.0 / 3.0
-    ret += (150.0 * math.sin(lng / 12.0 * pi) + 300.0 * math.sin(lng / 30.0 * pi)) * 2.0 / 3.0
-    return ret
+    def _transform_lng(self, lng, lat):
+        ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
+        ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0
+        ret += (20.0 * math.sin(lng * self.pi) + 40.0 * math.sin(lng / 3.0 * self.pi)) * 2.0 / 3.0
+        ret += (150.0 * math.sin(lng / 12.0 * self.pi) + 300.0 * math.sin(lng / 30.0 * self.pi)) * 2.0 / 3.0
+        return ret
 
-def wgs84_to_gcj02(lng, lat):
-    dlat = _transform_lat(lng - 105.0, lat - 35.0); dlng = _transform_lng(lng - 105.0, lat - 35.0)
-    radlat = lat / 180.0 * pi; magic = math.sin(radlat); magic = 1 - ee * magic * magic
-    sqrtmagic = math.sqrt(magic)
-    dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * pi)
-    dlng = (dlng * 180.0) / (a / sqrtmagic * math.cos(radlat) * pi)
-    return [lng + dlng, lat + dlat]
+    def wgs84_to_gcj02(self, lng, lat):
+        dlat = self._transform_lat(lng - 105.0, lat - 35.0)
+        dlng = self._transform_lng(lng - 105.0, lat - 35.0)
+        radlat = lat / 180.0 * self.pi
+        magic = math.sin(radlat)
+        magic = 1 - self.ee * magic * magic
+        sqrtmagic = math.sqrt(magic)
+        dlat = (dlat * 180.0) / ((self.a * (1 - self.ee)) / (magic * sqrtmagic) * self.pi)
+        dlng = (dlng * 180.0) / (self.a / sqrtmagic * math.cos(radlat) * self.pi)
+        mglat = lat + dlat
+        mglng = lng + dlng
+        return [mglng, mglat]
 
-def gcj02_to_bd09(lng, lat):
-    z = math.sqrt(lng * lng + lat * lat) + 0.00002 * math.sin(lat * x_pi)
-    theta = math.atan2(lat, lng) + 0.000003 * math.cos(lng * x_pi)
-    return [z * math.cos(theta) + 0.0065, z * math.sin(theta) + 0.006]
+    def gcj02_to_bd09(self, lng, lat):
+        z = math.sqrt(lng * lng + lat * lat) + 0.00002 * math.sin(lat * self.x_pi)
+        theta = math.atan2(lat, lng) + 0.000003 * math.cos(lng * self.x_pi)
+        bd_lng = z * math.cos(theta) + 0.0065
+        bd_lat = z * math.sin(theta) + 0.006
+        return [bd_lng, bd_lat]
+# --- 坐标转换算法结束 ---
+
+# 创建一个转换器实例
+coord_converter = CoordinateConverter()
 
 @st.cache_data
 def convert_coords_for_baidu(_df):
     df = _df.copy()
-    if df is None or df.empty: return pd.DataFrame()
+    if df is None or df.empty or '经度' not in df.columns or '纬度' not in df.columns: return pd.DataFrame()
     df['经度'] = pd.to_numeric(df['经度'], errors='coerce'); df['纬度'] = pd.to_numeric(df['纬度'], errors='coerce')
     df.dropna(subset=['经度', '纬度'], inplace=True)
     if df.empty: return pd.DataFrame()
@@ -52,23 +65,19 @@ def convert_coords_for_baidu(_df):
     failed_rows = 0
     for lon, lat in zip(df['经度'], df['纬度']):
         try:
-            # --- [核心修改] 增加try-except保护，防止单行数据错误导致整个应用崩溃 ---
-            gcj_lon, gcj_lat = wgs84_to_gcj02(lon, lat)
-            bd_lon, bd_lat = gcj02_to_bd09(gcj_lon, gcj_lat)
+            gcj_lon, gcj_lat = coord_converter.wgs84_to_gcj02(lon, lat)
+            bd_lon, bd_lat = coord_converter.gcj02_to_bd09(gcj_lon, gcj_lat)
             converted_coords.append((bd_lon, bd_lat))
         except (ValueError, TypeError):
             failed_rows += 1
-            # 添加一个无效坐标，后续可以被过滤掉
             converted_coords.append((None, None))
 
-    if failed_rows > 0:
-        st.warning(f"**数据警告**: 在坐标转换过程中，有 **{failed_rows}** 行数据因格式无效（例如经纬度超出范围）而被跳过。")
-
-    df['b_lon'] = [coord[0] for coord in converted_coords]
-    df['b_lat'] = [coord[1] for coord in converted_coords]
-    df.dropna(subset=['b_lon', 'b_lat'], inplace=True) # 过滤掉转换失败的行
+    if failed_rows > 0: st.warning(f"**数据警告**: 在坐标转换过程中，有 **{failed_rows}** 行数据因格式无效而被跳过。")
+    df['b_lon'] = [coord[0] for coord in converted_coords]; df['b_lat'] = [coord[1] for coord in converted_coords]
+    df.dropna(subset=['b_lon', 'b_lat'], inplace=True)
     return df
 
+# --- create_baidu_map 函数及其后面的代码保持不变 ---
 def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
     df_4g_conv = convert_coords_for_baidu(df_4g); df_5g_conv = convert_coords_for_baidu(df_5g)
     if df_4g_conv.empty: return "没有有效的4G数据用于地图显示。"
