@@ -4,5 +4,4 @@ haversine
 streamlit
 pydeck
 pyecharts
-coord-convert
 scipy
