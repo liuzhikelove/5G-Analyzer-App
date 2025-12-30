@@ -1,4 +1,4 @@
-# ===== File: app.py (版本 5.2 - 语法错误修正版) =====
+# ===== File: app.py (版本 5.3 - 内存优化 & 恢复进度条) =====
 
 import streamlit as st
 import pandas as pd
@@ -30,7 +30,6 @@ st.set_page_config(page_title="5G分流分析系统 (百度地图版)", page_ico
 st.title("🛰️ 5G分流分析系统 (百度地图版)")
 st.sidebar.header("操作面板")
 uploaded_4g_file = st.sidebar.file_uploader("1. 上传4G小区工参表 (Excel)", type=['xlsx', 'xls'])
-# --- [核心修改] 修正这里的拼写错误 ---
 uploaded_5g_file = st.sidebar.file_uploader("2. 上传5G小区工参表 (Excel)", type=['xlsx', 'xls'])
 st.sidebar.markdown("---")
 st.sidebar.subheader("算法参数")
@@ -43,15 +42,19 @@ st.sidebar.markdown("---")
 if 'df_4g_preview' not in st.session_state: st.session_state.df_4g_preview = None
 if 'df_5g_preview' not in st.session_state: st.session_state.df_5g_preview = None
 
-if uploaded_4g_file and st.session_state.df_4g_preview is None:
-    with st.spinner("正在加载4G文件预览..."):
-        st.session_state.df_4g_preview = pd.read_excel(uploaded_4g_file)
-if uploaded_5g_file and st.session_state.df_5g_preview is None:
-    with st.spinner("正在加载5G文件预览..."):
-        st.session_state.df_5g_preview = pd.read_excel(uploaded_5g_file)
+# 使用st.empty()为预览数据创建一个占位符，以便在分析时清除
+preview_4g_placeholder = st.empty()
+preview_5g_placeholder = st.empty()
 
-display_paginated_dataframe(st.session_state.df_4g_preview, "4G数据预览")
-display_paginated_dataframe(st.session_state.df_5g_preview, "5G数据预览")
+if uploaded_4g_file and st.session_state.df_4g_preview is None:
+    st.session_state.df_4g_preview = pd.read_excel(uploaded_4g_file)
+if uploaded_5g_file and st.session_state.df_5g_preview is None:
+    st.session_state.df_5g_preview = pd.read_excel(uploaded_5g_file)
+
+with preview_4g_placeholder.container():
+    display_paginated_dataframe(st.session_state.df_4g_preview, "4G数据预览")
+with preview_5g_placeholder.container():
+    display_paginated_dataframe(st.session_state.df_5g_preview, "5G数据预览")
 
 if st.sidebar.button("🚀 开始分析", type="primary"):
     if uploaded_4g_file is not None and uploaded_5g_file is not None:
@@ -59,12 +62,29 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
             st.error("错误：请先在Streamlit Cloud的Secrets中配置您的百度地图AK！")
         else:
             try:
+                # 点击分析后，清空预览数据以节约界面空间
+                preview_4g_placeholder.empty()
+                preview_5g_placeholder.empty()
+
                 with st.spinner("正在高效加载分析数据..."):
                     df_4g = pd.read_excel(uploaded_4g_file, usecols=REQUIRED_COLUMNS)
                     df_5g = pd.read_excel(uploaded_5g_file, usecols=REQUIRED_COLUMNS)
                 
-                with st.spinner('系统正在执行核心算法...'):
-                    results_df = analyze_5g_offload(df_4g, df_5g, d_colo, theta_colo, d_non_colo, n_non_colo)
+                # --- [核心修改] 重新引入进度条 ---
+                progress_bar = st.progress(0, text="分析准备中...")
+                def update_progress(current, total):
+                    progress_value = current / total if total > 0 else 0
+                    progress_text = f"正在分析: {current}/{total} 条记录..."
+                    progress_bar.progress(progress_value, text=progress_text)
+                
+                # --- [核心修改] 将 update_progress 回调函数传进去 ---
+                results_df = analyze_5g_offload(
+                    df_4g, df_5g, 
+                    d_colo, theta_colo, d_non_colo, n_non_colo,
+                    update_progress # <--- 恢复这一行
+                )
+                
+                progress_bar.progress(1.0, text="分析完成！正在准备结果展示...")
                 
                 del df_4g
                 del df_5g
