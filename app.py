@@ -1,4 +1,4 @@
-# ===== File: app.py (版本 5.1 - 内存优化版) =====
+# ===== File: app.py (版本 5.2 - 语法错误修正版) =====
 
 import streamlit as st
 import pandas as pd
@@ -30,7 +30,8 @@ st.set_page_config(page_title="5G分流分析系统 (百度地图版)", page_ico
 st.title("🛰️ 5G分流分析系统 (百度地图版)")
 st.sidebar.header("操作面板")
 uploaded_4g_file = st.sidebar.file_uploader("1. 上传4G小区工参表 (Excel)", type=['xlsx', 'xls'])
-uploaded_5g_file = st.sidebar.file_uploader("2. 上传5G小区工参表 (Excel)", type=['xlsx',xls'])
+# --- [核心修改] 修正这里的拼写错误 ---
+uploaded_5g_file = st.sidebar.file_uploader("2. 上传5G小区工参表 (Excel)", type=['xlsx', 'xls'])
 st.sidebar.markdown("---")
 st.sidebar.subheader("算法参数")
 d_colo = st.sidebar.number_input("共站址距离阈值 (米)", 1, 500, 50)
@@ -39,7 +40,6 @@ d_non_colo = st.sidebar.number_input("非共站址搜索半径 (米)", 50, 2000,
 n_non_colo = st.sidebar.number_input("非共站址5G小区数量阈值 (个)", 1, 10, 1)
 st.sidebar.markdown("---")
 
-# --- [核心修改] 分开处理预览数据和分析数据 ---
 if 'df_4g_preview' not in st.session_state: st.session_state.df_4g_preview = None
 if 'df_5g_preview' not in st.session_state: st.session_state.df_5g_preview = None
 
@@ -59,7 +59,6 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
             st.error("错误：请先在Streamlit Cloud的Secrets中配置您的百度地图AK！")
         else:
             try:
-                # --- [核心优化] 只读取必需的列进行分析，大大降低内存占用 ---
                 with st.spinner("正在高效加载分析数据..."):
                     df_4g = pd.read_excel(uploaded_4g_file, usecols=REQUIRED_COLUMNS)
                     df_5g = pd.read_excel(uploaded_5g_file, usecols=REQUIRED_COLUMNS)
@@ -67,7 +66,6 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
                 with st.spinner('系统正在执行核心算法...'):
                     results_df = analyze_5g_offload(df_4g, df_5g, d_colo, theta_colo, d_non_colo, n_non_colo)
                 
-                # 手动释放不再需要的DataFrame内存
                 del df_4g
                 del df_5g
                 gc.collect()
@@ -76,7 +74,6 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
                 st.subheader("🗺️ 百度地图可视化结果")
                 with st.spinner('正在生成百度地图...'):
                     baidu_ak = st.secrets["BAIDU_AK"]
-                    # 传递原始的预览DataFrame用于地图上的信息展示
                     map_html = create_baidu_map(st.session_state.df_4g_preview, st.session_state.df_5g_preview, results_df, baidu_ak)
                 
                 if "没有有效" in str(map_html):
