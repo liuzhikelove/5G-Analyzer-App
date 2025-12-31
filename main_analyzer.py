@@ -3,17 +3,15 @@ import pandas as pd; import numpy as np; from scipy.spatial import cKDTree
 from algorithms import calculate_distance, calculate_azimuth_difference
 DEGREE_PER_METER = 1 / 111320
 def analyze_5g_offload(df_4g, df_5g, d_colo, theta_colo, d_non_colo, n_non_colo, progress_callback=None):
-    results = []
+    results = []; total_rows = len(df_4g)
     for col in ['经度', '纬度', '方位角']: df_4g[col] = pd.to_numeric(df_4g[col], errors='coerce'); df_5g[col] = pd.to_numeric(df_5g[col], errors='coerce')
     df_4g.dropna(subset=['经度', '纬度', '方位角'], inplace=True); df_5g.dropna(subset=['经度', '纬度', '方位角'], inplace=True)
-    total_rows = len(df_4g)
     if df_5g.empty:
-        for idx, (_, row_4g) in enumerate(df_4g.iterrows()):
+        for _, row_4g in df_4g.iterrows():
             current_result = row_4g.to_dict(); current_result['分析结果'] = "5G规划建设"; current_result['建议分流小区'] = "N/A"; results.append(current_result)
-            if progress_callback: progress_callback(idx + 1, total_rows)
         return pd.DataFrame(results)
     coords_5g = np.array(df_5g[['纬度', '经度']]); tree_5g = cKDTree(coords_5g); radius_in_degrees = d_non_colo * DEGREE_PER_METER
-    for idx, (_, row_4g) in enumerate(df_4g.iterrows()):
+    for index, row_4g in df_4g.iterrows():
         lat_4g = row_4g['纬度']; lon_4g = row_4g['经度']; azimuth_4g = row_4g['方位角']; coord_4g = [lat_4g, lon_4g]
         nearby_indices = tree_5g.query_ball_point(coord_4g, r=radius_in_degrees)
         analysis_result = "5G规划建设"; suggested_cell_name = "N/A"
@@ -28,5 +26,5 @@ def analyze_5g_offload(df_4g, df_5g, d_colo, theta_colo, d_non_colo, n_non_colo,
             elif min_dist <= d_non_colo:
                 if len(nearby_indices) >= n_non_colo: suggested_cell_name = nearest_5g_cell['小区名称']; analysis_result = f"非共站址5G分流小区 (范围内有{len(nearby_indices)}个5G小区，最近距离: {min_dist:.2f}m)"
         current_result = row_4g.to_dict(); current_result['分析结果'] = analysis_result; current_result['建议分流小区'] = suggested_cell_name; results.append(current_result)
-        if progress_callback: progress_callback(idx + 1, total_rows)
+        if progress_callback: progress_callback(index + 1, total_rows)
     return pd.DataFrame(results)

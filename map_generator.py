@@ -28,8 +28,8 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
     for _, r in df_4g_vis.iterrows():
         res = str(r.get('分析结果', '')); matched=False
         for k in categories.keys():
-            if k in res: categories[k].append([r['b_lon'], r['b_lat']]); matched=True; break
-        if not matched: categories['其他'].append([r['b_lon'], r['b_lat']])
+            if k in res: categories[k].append([r['b_lon'], r['b_lat'], r['小区名称']]); matched=True; break
+        if not matched: categories['其他'].append([r['b_lon'], r['b_lat'], r['小区名称']])
     heatmap_data_5g = [[r['b_lon'], r['b_lat'], 1] for _, r in df_5g_conv.iterrows()] if not df_5g_conv.empty else []
     center_lon = df_4g_conv['b_lon'].mean(); center_lat = df_4g_conv['b_lat'].mean()
     bmap = (BMap(init_opts=opts.InitOpts(width="100%", height="600px")).add_schema(baidu_ak=baidu_ak, center=[center_lon, center_lat], zoom=14, is_roam=True))
@@ -37,5 +37,5 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
     for name, data in categories.items():
         if data: bmap.add(series_name=name, type_="scatter", data_pair=data, symbol="pin", symbol_size=15, color=color_map.get(name), label_opts=opts.LabelOpts(is_show=False))
     if heatmap_data_5g: bmap.add(series_name="5G站点热力图", type_="heatmap", data_pair=heatmap_data_5g, point_size=5, blur_size=15)
-    bmap.set_global_opts(title_opts=opts.TitleOpts(title="小区分析结果百度地图可视化", pos_left="center"), legend_opts=opts.LegendOpts(orient="vertical", pos_top="10%", pos_left="2%"), tooltip_opts=opts.TooltipOpts(trigger="item", formatter=lambda p: f"{p.seriesName}<br/>经度: {p.data[0]:.6f}<br/>纬度: {p.data[1]:.6f}" if p.data else ""))
+    bmap.set_global_opts(title_opts=opts.TitleOpts(title="小区分析结果百度地图可视化", pos_left="center"), legend_opts=opts.LegendOpts(orient="vertical", pos_top="10%", pos_left="2%"), tooltip_opts=opts.TooltipOpts(trigger="item", formatter=lambda p: f"{p.seriesName}<br/>{p.data.value[2]}" if p.data else ""))
     return bmap.render_embed()
