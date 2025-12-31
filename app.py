@@ -182,17 +182,22 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
         
         # 生成百度地图（如果有有效AK）
         if has_valid_ak:
-            st.markdown("---"); st.subheader("️ 百度地图可视化结果")
+            st.markdown("---"); st.subheader("🗺️ 百度地图可视化结果")
             with st.spinner('正在生成百度地图...'):
                 try:
                     map_html = create_baidu_map(df_4g, df_5g, results_df, baidu_ak)
                     
                     if isinstance(map_html, str):
-                        if "没有有效" in map_html: 
+                        if "没有有效" in map_html:
                             st.warning(map_html)
+                        elif "地图生成过程中出错" in map_html:
+                            st.error(map_html)
+                        elif "<!DOCTYPE html>" in map_html:
+                            # 这是正常的HTML地图内容，显示它
+                            components.html(map_html, height=610, scrolling=True)
                         else:
                             st.error(f"地图生成错误：{map_html}")
-                    else: 
+                    else:
                         components.html(map_html, height=610, scrolling=True)
                 except Exception as e:
                     st.error(f"地图生成过程中出错：{e}")
