@@ -316,12 +316,49 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             except Exception as e:
                 st.warning(f"热力图处理失败: {str(e)}")
         
-        # 我们将完全跳过扇区图层的绘制，只显示基本信息
-        # 这是因为BMap库在处理某些坐标时会出现问题
-        st.info("跳过所有扇区图层绘制，只显示基本信息")
+        # 绘制扇区图层，使用更简单的方法
+        st.info("开始绘制扇区图层，使用更简单的方法")
         for category, polygons in sector_polygons_by_category.items():
             if polygons and len(polygons) > 0:
                 st.info(f"{category}: {len(polygons)} 个扇区多边形")
+                
+                # 只绘制每个类别的前10个扇区，避免性能问题
+                limited_polygons = polygons[:10]
+                
+                # 收集所有扇区的中心点
+                sector_centers = []
+                for polygon in limited_polygons:
+                    if polygon and isinstance(polygon, list) and len(polygon) > 2:
+                        try:
+                            # 获取扇区的中心点（第一个点）
+                            center = polygon[0]
+                            if isinstance(center, (list, tuple)) and len(center) == 2:
+                                lon, lat = center
+                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                    # 检查坐标是否在合理范围内
+                                    if 73 <= lon <= 135 and 18 <= lat <= 53:
+                                        # 检查坐标是否为有限数值
+                                        if math.isfinite(lon) and math.isfinite(lat):
+                                            sector_centers.append([lon, lat])
+                        except (TypeError, ValueError, IndexError) as e:
+                            continue
+                
+                # 如果有有效的扇区中心点，就绘制它们
+                if sector_centers:
+                    try:
+                        # 使用简化的散点图配置，避免复杂参数
+                        bmap.add(
+                            series_name=f"{category}_扇区",
+                            type_="scatter",
+                            data_pair=sector_centers,
+                            symbol="circle",
+                            symbol_size=10,
+                            color=color_map.get(category),
+                            label_opts=opts.LabelOpts(is_show=False)
+                        )
+                        st.success(f"成功绘制 {len(sector_centers)} 个{category}扇区")
+                    except Exception as e:
+                        st.warning(f"{category}扇区绘制失败: {str(e)}")
             else:
                 st.info(f"没有有效的{category}扇区数据")
         
