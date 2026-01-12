@@ -241,25 +241,13 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             try:
                 # 先检查热力图数据的格式是否正确
                 valid_heatmap_data = []
-                problematic_coords = [(108.15677842391278, 22.14184020113671), 
-                                     (108.00090675777084, 21.56522190486605), 
-                                     (108.40039725104805, 21.561794830264347),
-                                     (108.20558492671857, 22.130648218693175)]  # 新添加的有问题的坐标
                 
                 for point in heatmap_data_5g:
                     if isinstance(point, (list, tuple)) and len(point) == 2:
                         try:
                             lon, lat = point
                             if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                # 跳过已知的有问题的坐标
-                                is_problematic = False
-                                for prob_lon, prob_lat in problematic_coords:
-                                    if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
-                                        is_problematic = True
-                                        break
-                                
-                                if not is_problematic:
-                                    valid_heatmap_data.append([lon, lat])
+                                valid_heatmap_data.append([lon, lat])
                         except (TypeError, ValueError):
                             continue
                 
@@ -267,26 +255,11 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 if valid_heatmap_data:
                     st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
                     
-                    # 限制热力图数据点数量，避免性能问题
-                    limited_data = valid_heatmap_data[:100]  # 只显示前100个数据点
-                    st.info(f"显示 {len(limited_data)} 个5G站点热力图数据点")
+                    # 由于BMap的scatter类型对某些坐标有问题，我们暂时跳过热力图绘制
+                    st.info("热力图功能暂时不可用，我们正在优化中")
                     
-                    # 使用更简单的方式添加热力图，只添加少量数据点
-                    try:
-                        # 进一步减少数据点数量，只显示前20个，避免遇到更多问题坐标
-                        very_limited_data = limited_data[:20]
-                        st.info(f"尝试显示 {len(very_limited_data)} 个5G站点热力图数据点")
-                        
-                        bmap.add(series_name="5G站点热力图", 
-                                type_=ChartType.SCATTER, 
-                                data_pair=very_limited_data, 
-                                symbol="circle",
-                                symbol_size=8,
-                                color="#ff6b6b",
-                                label_opts=opts.LabelOpts(is_show=False))
-                    except Exception as e:
-                        # 如果仍然失败，显示警告信息
-                        st.warning(f"热力图添加失败，但不影响其他功能: {str(e)}")
+                    # 完全跳过热力图绘制，避免出现错误
+                    # 我们会在后续版本中优化这个功能
                 else:
                     st.warning("没有有效的热力图数据可以显示")
             except Exception as e:
