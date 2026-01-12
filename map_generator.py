@@ -2,7 +2,7 @@
 import pandas as pd
 from pyecharts import options as opts
 from pyecharts.charts import BMap, Scatter, HeatMap
-from pyecharts.globals import BMapType
+from pyecharts.globals import BMapType, ChartType
 import streamlit as st
 import math
 from algorithms import create_sector_polygon
@@ -245,17 +245,22 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     if isinstance(point, (list, tuple)) and len(point) == 2:
                         lon, lat = point
                         if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                            valid_heatmap_data.append(point)
+                            # 热力图数据需要格式为 [经度, 纬度, 权重]
+                            valid_heatmap_data.append([lon, lat, 1])
                 
                 # 只使用有效的热力图数据
                 if valid_heatmap_data:
                     st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
                     
-                    # 由于BMap的scatter类型对某些坐标有问题，我们暂时跳过热力图绘制
-                    st.info("热力图功能暂时不可用，我们正在优化中")
-                    
-                    # 完全跳过热力图绘制，避免出现错误
-                    # 我们会在后续版本中优化这个功能
+                    # 使用正确的方式添加热力图
+                    try:
+                        bmap.add(series_name="5G站点热力图", 
+                                type_=ChartType.HEATMAP, 
+                                data_pair=valid_heatmap_data, 
+                                label_opts=opts.LabelOpts(is_show=False))
+                    except Exception as e:
+                        # 如果仍然失败，显示警告信息
+                        st.warning(f"热力图添加失败，但不影响其他功能: {str(e)}")
                 else:
                     st.warning("没有有效的热力图数据可以显示")
             except Exception as e:
@@ -283,14 +288,16 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 # 只使用有效的多边形
                 if valid_polygons:
                     try:
-                        # 扇区功能暂时不可用，我们正在优化中
-                        st.info(f"{category}扇区功能暂时不可用，我们正在优化中")
-                        
-                        # 或者，我们可以尝试绘制每个多边形的边界
-                        # 但需要确保data_pair是一个点列表，而不是嵌套列表
-                        # 这里我们暂时跳过扇区绘制
+                        # 使用正确的方式添加扇区多边形
+                        for polygon in valid_polygons:
+                            bmap.add(series_name=f"{category}_扇区", 
+                                    type_=ChartType.LINE, 
+                                    data_pair=polygon, 
+                                    symbol="none", 
+                                    is_polyline=True, 
+                                    color=color_map.get(category))
                     except Exception as e:
-                        # 如果失败，就跳过这个类别的扇区，不影响其他功能
+                        # 如果失败，显示警告信息
                         st.warning(f"{category}扇区添加失败，但不影响其他功能: {str(e)}")
                 else:
                     st.info(f"没有有效的{category}扇区数据可以显示")
