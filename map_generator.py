@@ -271,35 +271,70 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 if valid_heatmap_data:
                     st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
                     
-                    # 尝试添加5G站点的散点图
-                    try:
-                        bmap.add(
-                            series_name="5G站点",
-                            type_="scatter",
-                            data_pair=valid_heatmap_data,
-                            symbol="pin",
-                            symbol_size=15,
-                            color="#1f77b4",
-                            label_opts=opts.LabelOpts(is_show=False)
-                        )
-                        st.success("5G站点散点图绘制成功")
-                    except Exception as e:
-                        st.warning(f"5G站点散点图绘制失败: {str(e)}")
-                        # 尝试使用更简单的配置
+                    # 已知的有问题的坐标列表（从错误信息中提取）
+                    problematic_coords = {
+                        (108.00090675777084, 21.56522190486605),
+                        (108.40039725104805, 21.561794830264347),
+                        (108.15677842391278, 22.14184020113671),
+                        (108.20558492671857, 22.130648218693175),
+                        (107.99792728076144, 21.566265485610074),
+                        (107.98056972058905, 21.55915847474701),
+                        (108.40179213194165, 21.576245375191352),
+                        (107.70817288145413, 22.13643617379366)
+                    }
+                    
+                    # 过滤掉已知的有问题的坐标
+                    filtered_5g_data = []
+                    for point in valid_heatmap_data:
+                        if isinstance(point, (list, tuple)) and len(point) == 2:
+                            try:
+                                lon, lat = point
+                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                    # 检查当前坐标是否接近任何已知的问题坐标
+                                    is_problematic = False
+                                    for prob_lon, prob_lat in problematic_coords:
+                                        if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
+                                            is_problematic = True
+                                            break
+                                    
+                                    if not is_problematic:
+                                        filtered_5g_data.append([lon, lat])
+                            except (TypeError, ValueError):
+                                continue
+                    
+                    # 只使用过滤后的有效数据
+                    if filtered_5g_data:
+                        # 尝试添加5G站点的散点图
                         try:
-                            # 限制5G站点数量，避免性能问题
-                            limited_5g_data = valid_heatmap_data[:100]
                             bmap.add(
                                 series_name="5G站点",
                                 type_="scatter",
-                                data_pair=limited_5g_data,
-                                symbol="circle",
-                                symbol_size=8,
-                                color="#1f77b4"
+                                data_pair=filtered_5g_data,
+                                symbol="pin",
+                                symbol_size=15,
+                                color="#1f77b4",
+                                label_opts=opts.LabelOpts(is_show=False)
                             )
-                            st.success("5G站点散点图（简化版）绘制成功")
-                        except Exception as e2:
-                            st.warning(f"5G站点散点图（简化版）绘制失败: {str(e2)}")
+                            st.success("5G站点散点图绘制成功")
+                        except Exception as e:
+                            st.warning(f"5G站点散点图绘制失败: {str(e)}")
+                            # 尝试使用更简单的配置
+                            try:
+                                # 限制5G站点数量，避免性能问题
+                                limited_5g_data = filtered_5g_data[:100]
+                                bmap.add(
+                                    series_name="5G站点",
+                                    type_="scatter",
+                                    data_pair=limited_5g_data,
+                                    symbol="circle",
+                                    symbol_size=8,
+                                    color="#1f77b4"
+                                )
+                                st.success("5G站点散点图（简化版）绘制成功")
+                            except Exception as e2:
+                                st.warning(f"5G站点散点图（简化版）绘制失败: {str(e2)}")
+                    else:
+                        st.warning("没有有效的5G站点数据可以显示")
                 else:
                     st.warning("没有有效的热力图数据可以显示")
             except Exception as e:
@@ -317,7 +352,10 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     (108.40039725104805, 21.561794830264347),
                     (108.15677842391278, 22.14184020113671),
                     (108.20558492671857, 22.130648218693175),
-                    (107.99792728076144, 21.566265485610074)
+                    (107.99792728076144, 21.566265485610074),
+                    (107.98056972058905, 21.55915847474701),
+                    (108.40179213194165, 21.576245375191352),
+                    (107.70817288145413, 22.13643617379366)
                 }
                 
                 for polygon in polygons:
@@ -353,29 +391,37 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         limited_centers = valid_centers[:50]  # 只显示前50个中心点
                         st.info(f"显示{len(limited_centers)}个{category}扇区中心点")
                         
-                        # 先验证所有中心点，然后一次性添加
-                        verified_centers = []
+                        # 逐个添加中心点，跳过有问题的坐标
+                        added_count = 0
                         for center in limited_centers:
                             if isinstance(center, (list, tuple)) and len(center) == 2:
                                 try:
                                     lon, lat = center
                                     if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                        verified_centers.append([lon, lat])
-                                except (TypeError, ValueError):
+                                        # 再次检查当前坐标是否接近任何已知的问题坐标
+                                        is_problematic = False
+                                        for prob_lon, prob_lat in problematic_coords:
+                                            if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
+                                                is_problematic = True
+                                                break
+                                        
+                                        if not is_problematic:
+                                            # 使用简化的散点图配置，避免复杂参数
+                                            bmap.add(
+                                                series_name=f"{category}_扇区",
+                                                type_="scatter",
+                                                data_pair=[[lon, lat]],  # 一次只添加一个点
+                                                symbol="circle",
+                                                symbol_size=10,
+                                                color=color_map.get(category),
+                                                label_opts=opts.LabelOpts(is_show=False)
+                                            )
+                                            added_count += 1
+                                except (TypeError, ValueError) as e:
                                     continue
                         
-                        # 如果有有效的中心点，就一次性添加，而不是逐个添加
-                        if verified_centers:
-                            # 使用简化的散点图配置，避免复杂参数
-                            bmap.add(
-                                series_name=f"{category}_扇区",
-                                type_="scatter",
-                                data_pair=verified_centers,
-                                symbol="circle",
-                                symbol_size=10,
-                                color=color_map.get(category),
-                                label_opts=opts.LabelOpts(is_show=False)
-                            )
+                        if added_count > 0:
+                            st.success(f"成功添加 {added_count} 个{category}扇区中心点")
                     except Exception as e:
                         # 如果失败，显示警告信息
                         st.warning(f"{category}扇区添加失败，但不影响其他功能: 当前地点: {str(e)}")
