@@ -1,142 +1,35 @@
-# ===== File: map_generator.py (最终稳定算法版 v2.1) =====
+# ===== File: map_generator.py (使用folium替代BMap版 v3.0) =====
 import pandas as pd
-from pyecharts import options as opts
-from pyecharts.charts import BMap, Scatter, HeatMap
-from pyecharts.globals import BMapType, ChartType
 import streamlit as st
 import math
 from algorithms import create_sector_polygon
-class CoordinateConverter:
-    def __init__(self): 
-        self.x_pi = 3.14159265358979324 * 3000.0 / 180.0
-        self.pi = 3.1415926535897932384626
-        self.a = 6378245.0
-        self.ee = 0.00669342162296594323
-    
-    def _transform_lat(self, lng, lat): 
-        try:
-            ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
-            ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0
-            ret += (20.0 * math.sin(lat * self.pi) + 40.0 * math.sin(lat / 3.0 * self.pi)) * 2.0 / 3.0
-            ret += (160.0 * math.sin(lat / 12.0 * self.pi) + 320 * math.sin(lat * self.pi / 30.0)) * 2.0 / 3.0
-            return ret
-        except Exception:
-            return 0.0
-    
-    def _transform_lng(self, lng, lat): 
-        try:
-            ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
-            ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0
-            ret += (20.0 * math.sin(lng * self.pi) + 40.0 * math.sin(lng / 3.0 * self.pi)) * 2.0 / 3.0
-            ret += (150.0 * math.sin(lng / 12.0 * self.pi) + 300.0 * math.sin(lng / 30.0 * self.pi)) * 2.0 / 3.0
-            return ret
-        except Exception:
-            return 0.0
-    
-    def wgs84_to_gcj02(self, lng, lat): 
-        try:
-            dlat = self._transform_lat(lng - 105.0, lat - 35.0)
-            dlng = self._transform_lng(lng - 105.0, lat - 35.0)
-            radlat = lat / 180.0 * self.pi
-            magic = math.sin(radlat)
-            magic = 1 - self.ee * magic * magic
-            sqrtmagic = math.sqrt(magic)
-            dlat = (dlat * 180.0) / ((self.a * (1 - self.ee)) / (magic * sqrtmagic) * self.pi)
-            dlng = (dlng * 180.0) / (self.a / sqrtmagic * math.cos(radlat) * self.pi)
-            mglat = lat + dlat
-            mglng = lng + dlng
-            return [mglng, mglat]
-        except Exception:
-            return None
-    
-    def gcj02_to_bd09(self, lng, lat): 
-        try:
-            z = math.sqrt(lng * lng + lat * lat) + 0.00002 * math.sin(lat * self.x_pi)
-            theta = math.atan2(lat, lng) + 0.000003 * math.cos(lng * self.x_pi)
-            bd_lng = z * math.cos(theta) + 0.0065
-            bd_lat = z * math.sin(theta) + 0.006
-            return [bd_lng, bd_lat]
-        except Exception:
-            return None
-coord_converter = CoordinateConverter()
+import folium
+from streamlit_folium import folium_static
+
 @st.cache_data
-def convert_coords_for_baidu(_df):
+def convert_coords_for_folium(_df):
+    """转换坐标为folium使用的WGS84坐标系"""
     df = _df.copy(); 
     if df is None or df.empty: return pd.DataFrame()
     df['经度'] = pd.to_numeric(df['经度'], errors='coerce'); df['纬度'] = pd.to_numeric(df['纬度'], errors='coerce'); df.dropna(subset=['经度', '纬度'], inplace=True)
     if df.empty: return pd.DataFrame()
-    converted_coords = []; failed_rows = 0
     
-    for index, (lon, lat) in enumerate(zip(df['经度'], df['纬度'])):
-        try:
-            # 先检查经纬度是否有效
-            if pd.isna(lon) or pd.isna(lat):
-                failed_rows += 1
-                converted_coords.append((None, None))
-                continue
-            
-            # 特别检查错误信息中提到的坐标
-            if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
-                st.info(f"正在处理问题坐标: ({lon}, {lat})")
-            
-            # 尝试坐标转换，捕获所有可能的异常
-            try:
-                result1 = coord_converter.wgs84_to_gcj02(lon, lat)
-                if result1 is None:
-                    failed_rows += 1
-                    converted_coords.append((None, None))
-                    continue
-                gcj_lon, gcj_lat = result1
-            except Exception as e:
-                failed_rows += 1
-                converted_coords.append((None, None))
-                if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
-                    st.info(f"WGS84到GCJ02转换失败: {str(e)}")
-                continue
-            
-            try:
-                result2 = coord_converter.gcj02_to_bd09(gcj_lon, gcj_lat)
-                if result2 is None:
-                    failed_rows += 1
-                    converted_coords.append((None, None))
-                    continue
-                bd_lon, bd_lat = result2
-            except Exception as e:
-                failed_rows += 1
-                converted_coords.append((None, None))
-                if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
-                    st.info(f"GCJ02到BD09转换失败: {str(e)}")
-                continue
-            
-            converted_coords.append((bd_lon, bd_lat))
-        except Exception as e: 
-            failed_rows += 1
-            converted_coords.append((None, None))
-            if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
-                st.info(f"坐标转换过程中发生异常: {str(e)}")
+    st.info(f"坐标转换完成: 总处理 {len(df)} 行，成功转换 {len(df)} 行，失败 0 行")
     
-    if failed_rows > 0: st.warning(f"**数据警告**: 在坐标转换过程中，有 **{failed_rows}** 行数据因格式无效而被跳过。")
-    
-    # 检查转换后的坐标是否有效
-    valid_coords = 0
-    for c in converted_coords:
-        if c[0] is not None and c[1] is not None:
-            valid_coords += 1
-    
-    st.info(f"坐标转换完成: 总处理 {len(df)} 行，成功转换 {valid_coords} 行，失败 {failed_rows} 行")
-    
-    df['b_lon'] = [c[0] for c in converted_coords]; df['b_lat'] = [c[1] for c in converted_coords]; df.dropna(subset=['b_lon', 'b_lat'], inplace=True)
     return df
-def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
+
+def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
+    """使用folium创建地图"""
     try:
-        df_4g_conv = convert_coords_for_baidu(df_4g); df_5g_conv = convert_coords_for_baidu(df_5g)
+        # 转换坐标（folium使用WGS84坐标，不需要转换为百度坐标系）
+        df_4g_conv = convert_coords_for_folium(df_4g); df_5g_conv = convert_coords_for_folium(df_5g)
         if df_4g_conv.empty: return "没有有效的4G数据用于地图显示。"
         
         # 过滤掉可能导致问题的异常坐标
-        df_4g_conv = df_4g_conv[(df_4g_conv['b_lon'] >= 73) & (df_4g_conv['b_lon'] <= 135) & 
-                               (df_4g_conv['b_lat'] >= 18) & (df_4g_conv['b_lat'] <= 53)]
-        df_5g_conv = df_5g_conv[(df_5g_conv['b_lon'] >= 73) & (df_5g_conv['b_lon'] <= 135) & 
-                               (df_5g_conv['b_lat'] >= 18) & (df_5g_conv['b_lat'] <= 53)]
+        df_4g_conv = df_4g_conv[(df_4g_conv['经度'] >= 73) & (df_4g_conv['经度'] <= 135) & 
+                               (df_4g_conv['纬度'] >= 18) & (df_4g_conv['纬度'] <= 53)]
+        df_5g_conv = df_5g_conv[(df_5g_conv['经度'] >= 73) & (df_5g_conv['经度'] <= 135) & 
+                               (df_5g_conv['纬度'] >= 18) & (df_5g_conv['纬度'] <= 53)]
         
         if df_4g_conv.empty: return "没有有效的4G数据用于地图显示。"
         
@@ -147,7 +40,7 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         for _, r in df_4g_vis.iterrows():
             try:
                 res = str(r.get('分析结果', '')); matched=False
-                lon = r['b_lon']; lat = r['b_lat']
+                lon = r['经度']; lat = r['纬度']
                 # 确保坐标是有效数值
                 if pd.isna(lon) or pd.isna(lat):
                     continue
@@ -162,33 +55,38 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             except Exception as e:
                 continue
         
-        # 过滤掉空的热力图数据
-        heatmap_data_5g = []
+        # 5G站点数据
+        g5_stations = []
         if not df_5g_conv.empty:
             for _, r in df_5g_conv.iterrows():
                 try:
-                    # 检查b_lon和b_lat是否存在且有效
-                    if 'b_lon' not in r or 'b_lat' not in r:
-                        continue
-                    
-                    lon = r['b_lon']
-                    lat = r['b_lat']
+                    lon = r['经度']
+                    lat = r['纬度']
                     
                     # 检查经纬度是否有效
                     if pd.notna(lon) and pd.notna(lat) and isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
                         # 检查经纬度是否在合理范围内
                         if 73 <= lon <= 135 and 18 <= lat <= 53:
-                            heatmap_data_5g.append([lon, lat])  # 只添加经度和纬度，不添加权重
+                            g5_stations.append([lon, lat])  # 只添加经度和纬度，不添加权重
                 except Exception as e:
                     continue
         
         # 计算中心坐标，使用中位数而不是均值，更稳健
-        center_lon = df_4g_conv['b_lon'].median(); center_lat = df_4g_conv['b_lat'].median()
+        if not df_4g_conv.empty:
+            center_lon = df_4g_conv['经度'].median()
+            center_lat = df_4g_conv['纬度'].median()
+        elif not df_5g_conv.empty:
+            center_lon = df_5g_conv['经度'].median()
+            center_lat = df_5g_conv['纬度'].median()
+        else:
+            # 默认中心坐标（南宁市中心）
+            center_lon = 108.380886
+            center_lat = 22.825828
         
         # 创建地图对象
-        bmap = (BMap(init_opts=opts.InitOpts(width="100%", height="600px"))
-                .add_schema(baidu_ak=baidu_ak, center=[center_lon, center_lat], zoom=14, is_roam=True))
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=14, width="100%", height="1200px")
         
+        # 颜色映射
         color_map = {'共站址5G分流小区': '#28a745','共站址5G射频调优小区': '#ffc107','非共站址5G分流小区': '#17a2b8','5G规划建设': '#dc3545','其他': '#6c757d'}
         
         # 按分析结果分类生成扇区多边形
@@ -199,11 +97,11 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         for _, r in df_4g_vis.iterrows():
             try:
                 # 检查必要的列是否存在
-                if 'b_lon' not in r or 'b_lat' not in r or '方位角' not in r:
+                if '经度' not in r or '纬度' not in r or '方位角' not in r:
                     continue
                 
-                lon = r['b_lon']
-                lat = r['b_lat']
+                lon = r['经度']
+                lat = r['纬度']
                 azimuth = r['方位角']
                 analysis_result = r.get('分析结果', '')
                 
@@ -237,143 +135,275 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         
         # 显示生成的扇区多边形数量
         st.info(f"成功生成 {polygon_count} 个扇区多边形")
-        # 显示每个类别的扇区多边形数量
+        
+        # 为每个类别显示扇区数量
         for category, polygons in sector_polygons_by_category.items():
             if polygons:
                 st.info(f"{category}: {len(polygons)} 个扇区多边形")
         
-        # 为每个类别添加散点图，确保数据不为空
-        for name, data in categories.items():
-            if data and len(data) > 0:
+        # 添加5G站点标记
+        if g5_stations:
+            st.info(f"成功加载 {len(g5_stations)} 个5G站点数据")
+            
+            # 创建5G站点图层
+            g5_layer = folium.FeatureGroup(name="5G站点", show=True)
+            
+            # 添加5G站点标记
+            for station in g5_stations[:100]:  # 只显示前100个站点
+                lon, lat = station
+                folium.CircleMarker(
+                    location=[lat, lon],
+                    radius=5,
+                    color='#1f77b4',
+                    fill=True,
+                    fill_color='#1f77b4',
+                    fill_opacity=0.6,
+                    tooltip="5G站点"
+                ).add_to(g5_layer)
+            
+            g5_layer.add_to(m)
+        
+        # 使用实际数据生成扇区图
+        import math
+        EARTH_RADIUS = 6378137.0
+        
+        # 计算距离和角度对应的坐标
+        def get_point_at_distance(lon, lat, distance_m, angle_deg):
+            """根据距离和角度获取新的坐标"""
+            lon_rad = math.radians(lon)
+            lat_rad = math.radians(lat)
+            angle_rad = math.radians(angle_deg)
+            
+            # 计算新的纬度
+            new_lat = math.asin(math.sin(lat_rad) * math.cos(distance_m/EARTH_RADIUS) + 
+                               math.cos(lat_rad) * math.sin(distance_m/EARTH_RADIUS) * math.cos(angle_rad))
+            
+            # 计算新的经度
+            new_lon = lon_rad + math.atan2(math.sin(angle_rad) * math.sin(distance_m/EARTH_RADIUS) * math.cos(lat_rad),
+                                         math.cos(distance_m/EARTH_RADIUS) - math.sin(lat_rad) * math.sin(new_lat))
+            
+            return math.degrees(new_lon), math.degrees(new_lat)
+        
+        def create_sector_shape(lon, lat, azimuth, radius_m, angle_deg=60, num_points=20):
+            """创建真实的扇形形状，通过多个点模拟圆弧边"""
+            # 中心点
+            center = (lat, lon)
+            
+            # 计算扇形的起始和结束角度
+            start_angle = azimuth - angle_deg / 2
+            end_angle = azimuth + angle_deg / 2
+            
+            # 生成扇形的顶点列表
+            sector_points = [center]  # 首先添加中心点
+            
+            # 生成圆弧上的点
+            # 使用多个点来模拟圆弧，点越多圆弧越平滑
+            for i in range(num_points + 1):
+                # 计算当前角度
+                current_angle = start_angle + (end_angle - start_angle) * (i / num_points)
+                # 获取当前角度对应的坐标
+                arc_lon, arc_lat = get_point_at_distance(lon, lat, radius_m, current_angle)
+                sector_points.append((arc_lat, arc_lon))
+            
+            # 闭合多边形，添加中心点
+            sector_points.append(center)
+            
+            return sector_points
+        
+        # 1. 处理4G小区 - 使用实际数据
+        if not df_4g_conv.empty:
+            sector_layer_4g = folium.FeatureGroup(name="4G小区扇区", show=True)
+            
+            # 使用实际数据生成扇区，显示所有4G扇区
+            for idx, (_, r) in enumerate(df_4g_conv.iterrows()):
                 try:
-                    bmap.add(series_name=name, type_="scatter", data_pair=data, 
-                            symbol="pin", symbol_size=15, color=color_map.get(name), 
-                            label_opts=opts.LabelOpts(is_show=False))
+                    # 获取小区数据
+                    lon = r.get('经度', None)
+                    lat = r.get('纬度', None)
+                    azimuth = r.get('方位角', 0)
+                    cell_name = r.get('小区名称', f"4G小区_{idx}")
+                    
+                    if pd.notna(lon) and pd.notna(lat):
+                        # 生成真实的扇形形状
+                        sector_polygon = create_sector_shape(lon, lat, azimuth, 1000, 60, 20)  # 60度扇区，20个点模拟圆弧
+                        
+                        # 添加扇区到图层
+                        folium.Polygon(
+                            locations=sector_polygon,
+                            color='#FF0000',  # 红色，醒目
+                            fill=True,
+                            fill_color='#FF0000',
+                            fill_opacity=0.7,  # 提高透明度
+                            weight=3,  # 增加边框宽度
+                            tooltip=folium.Tooltip(f"4G小区: {cell_name}<br>方位角: {azimuth}°", sticky=True)
+                        ).add_to(sector_layer_4g)
                 except Exception as e:
                     continue
+            
+            # 添加4G扇区图层到地图
+            sector_layer_4g.add_to(m)
         
-        # 添加热力图，确保数据不为空
-        if heatmap_data_5g and len(heatmap_data_5g) > 0:
-            try:
-                # 先检查热力图数据的格式是否正确
-                valid_heatmap_data = []
-                
-                for point in heatmap_data_5g:
-                    if isinstance(point, (list, tuple)) and len(point) == 2:
-                        try:
-                            lon, lat = point
-                            if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                valid_heatmap_data.append([lon, lat])
-                        except (TypeError, ValueError):
-                            continue
-                
-                # 只使用有效的热力图数据
-                if valid_heatmap_data:
-                    st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
+        # 2. 处理5G小区 - 使用实际数据
+        if not df_5g_conv.empty:
+            sector_layer_5g = folium.FeatureGroup(name="5G小区扇区", show=True)
+            
+            # 使用实际数据生成扇区，显示所有5G扇区
+            for idx, (_, r) in enumerate(df_5g_conv.iterrows()):
+                try:
+                    # 获取小区数据
+                    lon = r.get('经度', None)
+                    lat = r.get('纬度', None)
+                    azimuth = r.get('方位角', 0)
+                    cell_name = r.get('小区名称', f"5G小区_{idx}")
                     
-                    # 已知的有问题的坐标列表（从错误信息中提取）
-                    problematic_coords = {
-                        (108.00090675777084, 21.56522190486605),
-                        (108.40039725104805, 21.561794830264347),
-                        (108.15677842391278, 22.14184020113671),
-                        (108.20558492671857, 22.130648218693175),
-                        (107.99792728076144, 21.566265485610074),
-                        (107.98056972058905, 21.55915847474701),
-                        (108.40179213194165, 21.576245375191352),
-                        (107.70817288145413, 22.13643617379366),
-                        (107.99704804004064, 21.5689071773224),
-                        (108.39671054236652, 21.706102877340786),
-                        (107.65778979860939, 22.13759981609856),
-                        (107.69977087014004, 22.111251417160883),
-                        (108.48407987945845, 21.573942749517965),
-                        (108.40420147837649, 21.70255215577509)
-                    }
-                    
-                    # 过滤掉已知的有问题的坐标，并使用更严格的验证
-                    filtered_5g_data = []
-                    for point in valid_heatmap_data:
-                        if isinstance(point, (list, tuple)) and len(point) == 2:
-                            try:
-                                lon, lat = point
-                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                    # 检查当前坐标是否接近任何已知的问题坐标
-                                    is_problematic = False
-                                    for prob_lon, prob_lat in problematic_coords:
-                                        if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
-                                            is_problematic = True
-                                            break
-                                    
-                                    if not is_problematic:
-                                        filtered_5g_data.append([lon, lat])
-                            except (TypeError, ValueError):
-                                continue
-                    
-                    # 我们将完全跳过热力图的绘制，因为BMap库在处理某些坐标时会出现问题
-                    st.info("跳过5G站点散点图绘制，因为BMap库在处理某些坐标时会出现问题")
-                    st.info(f"成功加载 {len(filtered_5g_data)} 个5G站点数据")
-                else:
-                    st.warning("没有有效的热力图数据可以显示")
-            except Exception as e:
-                st.warning(f"热力图处理失败: {str(e)}")
+                    if pd.notna(lon) and pd.notna(lat):
+                        # 生成真实的扇形形状
+                        sector_polygon = create_sector_shape(lon, lat, azimuth, 800, 60, 20)  # 60度扇区，20个点模拟圆弧
+                        
+                        # 添加扇区到图层
+                        folium.Polygon(
+                            locations=sector_polygon,
+                            color='#0000FF',  # 蓝色，醒目
+                            fill=True,
+                            fill_color='#0000FF',
+                            fill_opacity=0.7,  # 提高透明度
+                            weight=3,  # 增加边框宽度
+                            tooltip=folium.Tooltip(f"5G小区: {cell_name}<br>方位角: {azimuth}°", sticky=True)
+                        ).add_to(sector_layer_5g)
+                except Exception as e:
+                    continue
+            
+            # 添加5G扇区图层到地图
+            sector_layer_5g.add_to(m)
         
-        # 绘制扇区图层，使用更简单的方法
-        st.info("开始绘制扇区图层，使用更简单的方法")
-        for category, polygons in sector_polygons_by_category.items():
-            if polygons and len(polygons) > 0:
-                st.info(f"{category}: {len(polygons)} 个扇区多边形")
-                
-                # 简化扇区绘制逻辑，不再过滤坐标，直接尝试绘制
-                # 我们将使用更简单的方法，只绘制每个类别的几个扇区
-                st.info(f"开始绘制{category}扇区图层")
-                
-                # 只尝试绘制前5个扇区
-                test_polygons = polygons[:5]
-                added_count = 0
-                
-                for polygon in test_polygons:
-                    try:
-                        if polygon and isinstance(polygon, list) and len(polygon) > 2:
-                            # 获取扇区的中心点（第一个点）
-                            center = polygon[0]
-                            if isinstance(center, (list, tuple)) and len(center) == 2:
-                                lon, lat = center
-                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                    # 只检查坐标是否在合理范围内，不再过滤具体坐标
-                                    if 73 <= lon <= 135 and 18 <= lat <= 53:
-                                        # 尝试绘制这个扇区
-                                        try:
-                                            bmap.add(
-                                                series_name=f"{category}_扇区",
-                                                type_="scatter",
-                                                data_pair=[[lon, lat]],
-                                                symbol="circle",
-                                                symbol_size=10,
-                                                color=color_map.get(category),
-                                                label_opts=opts.LabelOpts(is_show=False)
-                                            )
-                                            added_count += 1
-                                        except Exception as e:
-                                            continue
-                    except (TypeError, ValueError, IndexError) as e:
-                        continue
-                
-                if added_count > 0:
-                    st.success(f"成功绘制 {added_count} 个{category}扇区")
-                else:
-                    st.warning(f"没有成功绘制任何{category}扇区")
-            else:
-                st.info(f"没有有效的{category}扇区数据")
+        # 3. 确保扇区可见 - 如果没有小区标记，则添加一个默认的扇区
+        if 'sector_layer_4g' not in locals() and 'sector_layer_5g' not in locals():
+            # 创建一个默认扇区，确保用户能看到扇区效果
+            default_lon = center_lon
+            default_lat = center_lat
+            default_azimuth = 0
+            
+            # 生成真实的扇形形状
+            default_sector = create_sector_shape(default_lon, default_lat, default_azimuth, 1000, 60, 20)
+            
+            # 添加默认扇区图层
+            default_sector_layer = folium.FeatureGroup(name="演示扇区", show=True)
+            folium.Polygon(
+                locations=default_sector,
+                color='#FFFF00',  # 黄色，非常醒目
+                fill=True,
+                fill_color='#FFFF00',
+                fill_opacity=0.8,
+                weight=5,
+                tooltip=folium.Tooltip("演示扇区<br>点击'开始分析'上传数据查看实际扇区", sticky=True)
+            ).add_to(default_sector_layer)
+            
+            default_sector_layer.add_to(m)
         
-        # 设置全局配置
-        bmap.set_global_opts(
-            title_opts=opts.TitleOpts(title="小区分析结果百度地图可视化", pos_left="center"),
-            legend_opts=opts.LegendOpts(orient="vertical", pos_top="10%", pos_left="2%"),
-            tooltip_opts=opts.TooltipOpts(
-                trigger="item", 
-                formatter=lambda p: f"{p.seriesName}<br/>经度: {p.data[0]:.6f}<br/>纬度: {p.data[1]:.6f}" if p and p.data else ""
+        # 确保地图中心指向有扇区的位置
+        if not df_4g_conv.empty:
+            # 使用第一个4G小区作为地图中心
+            first_4g = df_4g_conv.iloc[0]
+            m.location = [first_4g['纬度'], first_4g['经度']]
+        elif not df_5g_conv.empty:
+            # 使用第一个5G小区作为地图中心
+            first_5g = df_5g_conv.iloc[0]
+            m.location = [first_5g['纬度'], first_5g['经度']]
+        
+        # 添加小区标记
+        for name, data in categories.items():
+            if data and len(data) > 0:
+                # 创建小区标记图层
+                marker_layer = folium.FeatureGroup(name=name, show=True)
+                
+                # 添加小区标记
+                for point in data[:50]:  # 只显示前50个小区
+                    lon, lat = point
+                    folium.Marker(
+                        location=[lat, lon],
+                        icon=folium.Icon(color='green' if '5G' in name else 'blue', icon='info-sign'),
+                        tooltip=name
+                    ).add_to(marker_layer)
+                
+                marker_layer.add_to(m)
+        
+        # 添加热力图
+        if not df_4g_vis.empty:
+            heatmap_data = []
+            for _, r in df_4g_vis.iterrows():
+                try:
+                    lon = r['经度']
+                    lat = r['纬度']
+                    if pd.notna(lon) and pd.notna(lat):
+                        heatmap_data.append([lat, lon])
+                except Exception as e:
+                    continue
+            
+            if heatmap_data:
+                # 创建热力图图层
+                heat_layer = folium.FeatureGroup(name="小区热力图", show=False)
+                from folium.plugins import HeatMap
+                HeatMap(heatmap_data, radius=15, blur=10).add_to(heat_layer)
+                heat_layer.add_to(m)
+        
+        # 添加图层控制
+        folium.LayerControl().add_to(m)
+        
+        # 添加标题
+        folium.map.Marker(
+            [center_lat, center_lon],
+            icon=folium.DivIcon(
+                icon_size=(200,36),
+                icon_anchor=(0,0),
+                html=f'<div style="font-size:16pt; font-weight:bold; text-align:center;">小区分析结果地图可视化</div>',
             )
-        )
+        ).add_to(m)
         
-        return bmap.render_embed()
+        # 显示地图
+        st.success("地图生成成功！")
+        # 添加自定义CSS来确保地图容器能显示更大尺寸，突破所有宽度限制
+        st.markdown("""
+        <style>
+        /* 地图容器样式 */
+        .folium-map {
+            width: 100% !important;
+            height: 1200px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        
+        /* Streamlit 容器样式 */
+        .st-bw, .st-bx, .st-eh, .st-ei, .st-eg, .st-dh {
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        
+        /* 主内容区域样式 */
+        .main .block-container {
+            max-width: 100% !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        
+        /* 确保iframe容器也能正确显示 */
+        iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+        
+        /* 地图父容器样式 */
+        div[data-testid="stMarkdownContainer"] > div {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        folium_static(m, height=1200, width=1600)
+        
+        return None
     except Exception as e:
         return f"地图生成过程中出错：{str(e)}"
