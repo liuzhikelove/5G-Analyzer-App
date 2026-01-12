@@ -6,7 +6,7 @@ import time
 import streamlit.components.v1 as components
 import gc
 from main_analyzer import analyze_5g_offload
-from map_generator import create_baidu_map
+from map_generator import create_folium_map
 REQUIRED_COLUMNS = ['小区名称', '经度', '纬度', '方位角']
 def load_and_validate_data(uploaded_file, file_type):
     if uploaded_file is None: 
@@ -100,7 +100,7 @@ def display_paginated_dataframe(df, title):
         pagination_container = st.container(); sub_col1, sub_col2 = pagination_container.columns([2,1])
         with sub_col1: st.markdown(f"<div style='text-align: right; padding-top: 10px;'>总计: {len(df)} 条，共 {total_pages} 页</div>", unsafe_allow_html=True)
         with sub_col2: st.number_input("页码", 1, total_pages, step=1, key=page_num_key, label_visibility="collapsed")
-st.set_page_config(page_title="5G分流分析系统 (百度地图版)", page_icon="📡", layout="wide"); st.title("🛰️ 5G分流分析系统 (百度地图版)")
+st.set_page_config(page_title="5G分流分析系统 (Leaflet地图版)", page_icon="📡", layout="wide"); st.title("🛰️ 5G分流分析系统 (Leaflet地图版)")
 st.sidebar.header("操作面板"); uploaded_4g_file = st.sidebar.file_uploader("1. 上传4G小区工参表 (Excel)", type=['xlsx', 'xls']); uploaded_5g_file = st.sidebar.file_uploader("2. 上传5G小区工参表 (Excel)", type=['xlsx', 'xls'])
 st.sidebar.markdown("---"); st.sidebar.subheader("算法参数"); d_colo = st.sidebar.number_input("共站址距离阈值 (米)", 1, 500, 50); theta_colo = st.sidebar.number_input("共站址方位角偏差阈值 (度)", 1, 180, 30); d_non_colo = st.sidebar.number_input("非共站址搜索半径 (米)", 50, 2000, 300); n_non_colo = st.sidebar.number_input("非共站址5G小区数量阈值 (个)", 1, 10, 1)
 st.sidebar.markdown("---")
@@ -151,18 +151,8 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
         results_df = analyze_5g_offload(df_4g, df_5g, d_colo, theta_colo, d_non_colo, n_non_colo, update_progress)
         progress_bar.progress(1.0, text="分析完成！正在准备结果展示...")
         
-        # 检查百度地图AK配置
-        has_valid_ak = False
-        baidu_ak = None
-        try:
-            if "BAIDU_AK" in st.secrets and st.secrets["BAIDU_AK"] and st.secrets["BAIDU_AK"] != "your_baidu_map_ak_here":
-                baidu_ak = st.secrets["BAIDU_AK"]
-                has_valid_ak = True
-        except Exception as e:
-            st.warning(f"读取百度地图AK时出错：{e}")
-        
         # 显示分析结果，无论地图是否可用
-        st.markdown("---"); st.subheader("� 详细分析结果")
+        st.markdown("---"); st.subheader("📊 详细分析结果")
         st.dataframe(results_df, use_container_width=True)
         
         # 添加结果统计
@@ -180,31 +170,21 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
         with col4: st.metric("非共站址5G分流小区", non_colo_offload)
         with col5: st.metric("需要5G规划建设小区", need_construction)
         
-        # 生成百度地图（如果有有效AK）
-        if has_valid_ak:
-            st.markdown("---"); st.subheader("🗺️ 百度地图可视化结果")
-            with st.spinner('正在生成百度地图...'):
-                try:
-                    map_html = create_baidu_map(df_4g, df_5g, results_df, baidu_ak)
-                    
-                    if isinstance(map_html, str):
-                        if "没有有效" in map_html:
-                            st.warning(map_html)
-                        elif "地图生成过程中出错" in map_html:
-                            st.error(map_html)
-                        elif "<!DOCTYPE html>" in map_html:
-                            # 这是正常的HTML地图内容，显示它
-                            components.html(map_html, height=610, scrolling=True)
-                        else:
-                            st.error(f"地图生成错误：{map_html}")
+        # 生成Leaflet地图
+        st.markdown("---"); st.subheader("🗺️ Leaflet地图可视化结果")
+        with st.spinner('正在生成Leaflet地图...'):
+            try:
+                map_error = create_folium_map(df_4g, df_5g, results_df, None)
+                
+                if map_error and isinstance(map_error, str):
+                    if "没有有效" in map_error:
+                        st.warning(map_error)
+                    elif "地图生成过程中出错" in map_error:
+                        st.error(map_error)
                     else:
-                        components.html(map_html, height=610, scrolling=True)
-                except Exception as e:
-                    st.error(f"地图生成过程中出错：{e}")
-        else:
-            st.markdown("---"); st.subheader("🗺️ 百度地图可视化结果")
-            st.warning("未配置有效的百度地图AK，无法生成地图可视化。请在 .streamlit/secrets.toml 文件中配置有效的 BAIDU_AK 以启用地图功能。")
-            st.info("您可以从百度地图开放平台申请免费API Key：https://lbsyun.baidu.com/")
+                        st.error(f"地图生成错误：{map_error}")
+            except Exception as e:
+                st.error(f"地图生成过程中出错：{e}")
         
         output = BytesIO();
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
