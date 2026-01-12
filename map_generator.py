@@ -144,11 +144,10 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         # 添加热力图，确保数据不为空
         if heatmap_data_5g and len(heatmap_data_5g) > 0:
             try:
-                # 使用正确的热力图添加方式
+                # 使用简化的热力图添加方式，只使用支持的参数
                 bmap.add(series_name="5G站点热力图", type_="heatmap", 
                         data_pair=heatmap_data_5g, 
-                        label_opts=opts.LabelOpts(is_show=False),
-                        emphasis_opts=opts.ItemStyleOpts(color="#ff6b6b"))
+                        label_opts=opts.LabelOpts(is_show=False))
             except Exception as e:
                 st.warning(f"热力图添加失败: {str(e)}")
         
@@ -161,7 +160,7 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                             # 使用line类型绘制扇区的边界和填充
                             bmap.add(series_name=f"{category}_扇区", type_="line", 
                                     data_pair=polygon, 
-                                    symbol=None, 
+                                    symbol="none", 
                                     is_polyline=True, 
                                     line_opts=opts.LineOpts(color=color_map.get(category), opacity=0.7, width=2),
                                     area_opts=opts.AreaOpts(color=color_map.get(category), opacity=0.2))
