@@ -340,7 +340,8 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     (107.65778979860939, 22.13759981609856),
                     (107.69977087014004, 22.111251417160883),
                     (108.48407987945845, 21.573942749517965),
-                    (108.40420147837649, 21.70255215577509)
+                    (108.40420147837649, 21.70255215577509),
+                    (107.99223817723727, 21.562211409497472)  # 新添加的问题坐标
                 }
                 
                 # 收集所有扇区的中心点，过滤掉已知的有问题的坐标
@@ -369,22 +370,31 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         except (TypeError, ValueError, IndexError) as e:
                             continue
                 
-                # 如果有有效的扇区中心点，就绘制它们
+                # 如果有有效的扇区中心点，就绘制它们，逐个添加，跳过有问题的点
                 if sector_centers:
-                    try:
-                        # 使用简化的散点图配置，避免复杂参数
-                        bmap.add(
-                            series_name=f"{category}_扇区",
-                            type_="scatter",
-                            data_pair=sector_centers,
-                            symbol="circle",
-                            symbol_size=10,
-                            color=color_map.get(category),
-                            label_opts=opts.LabelOpts(is_show=False)
-                        )
-                        st.success(f"成功绘制 {len(sector_centers)} 个{category}扇区")
-                    except Exception as e:
-                        st.warning(f"{category}扇区绘制失败: {str(e)}")
+                    added_count = 0
+                    # 逐个添加扇区中心点，跳过有问题的点
+                    for center in sector_centers:
+                        try:
+                            # 使用简化的散点图配置，避免复杂参数
+                            bmap.add(
+                                series_name=f"{category}_扇区",
+                                type_="scatter",
+                                data_pair=[center],  # 一次只添加一个点
+                                symbol="circle",
+                                symbol_size=10,
+                                color=color_map.get(category),
+                                label_opts=opts.LabelOpts(is_show=False)
+                            )
+                            added_count += 1
+                        except Exception as e:
+                            # 跳过有问题的点，继续处理其他点
+                            continue
+                    
+                    if added_count > 0:
+                        st.success(f"成功绘制 {added_count} 个{category}扇区")
+                    else:
+                        st.warning(f"没有成功绘制任何{category}扇区")
                 else:
                     st.warning(f"没有有效的{category}扇区中心点可以绘制")
             else:
