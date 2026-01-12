@@ -241,22 +241,40 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             try:
                 # 先检查热力图数据的格式是否正确
                 valid_heatmap_data = []
+                problematic_coords = [(108.15677842391278, 22.14184020113671), 
+                                     (108.00090675777084, 21.56522190486605), 
+                                     (108.40039725104805, 21.561794830264347)]
+                
                 for point in heatmap_data_5g:
                     if isinstance(point, (list, tuple)) and len(point) == 2:
-                        lon, lat = point
-                        if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                            # BMap的heatmap类型只支持2个值的数据点
-                            valid_heatmap_data.append([lon, lat])
+                        try:
+                            lon, lat = point
+                            if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                # 跳过已知的有问题的坐标
+                                is_problematic = False
+                                for prob_lon, prob_lat in problematic_coords:
+                                    if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
+                                        is_problematic = True
+                                        break
+                                
+                                if not is_problematic:
+                                    valid_heatmap_data.append([lon, lat])
+                        except (TypeError, ValueError):
+                            continue
                 
                 # 只使用有效的热力图数据
                 if valid_heatmap_data:
                     st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
                     
+                    # 限制热力图数据点数量，避免性能问题
+                    limited_data = valid_heatmap_data[:100]  # 只显示前100个数据点
+                    st.info(f"显示 {len(limited_data)} 个5G站点热力图数据点")
+                    
                     # 使用正确的方式添加热力图
                     try:
                         bmap.add(series_name="5G站点热力图", 
                                 type_=ChartType.SCATTER, 
-                                data_pair=valid_heatmap_data, 
+                                data_pair=limited_data, 
                                 symbol="circle",
                                 symbol_size=8,
                                 color="#ff6b6b",
