@@ -245,20 +245,22 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     if isinstance(point, (list, tuple)) and len(point) == 2:
                         lon, lat = point
                         if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                            # 跳过错误信息中提到的有问题的坐标
-                            if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
-                                continue
                             valid_heatmap_data.append(point)
                 
                 # 只使用有效的热力图数据
                 if valid_heatmap_data:
                     st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
                     
-                    # 尝试使用BMap的scatter类型，使用最简化的参数
+                    # 由于BMap的scatter类型可能对某些坐标有问题，我们使用更简单的方式
+                    # 直接跳过热力图，或者使用其他方式显示
+                    st.info("热力图功能暂时不可用，我们正在优化中")
+                    
+                    # 或者，我们可以尝试使用非常简化的参数，只添加少量数据点
                     try:
-                        # 只使用最基本的参数，避免复杂的配置
+                        # 只使用前100个数据点，避免处理太多可能有问题的坐标
+                        sample_data = valid_heatmap_data[:100]
                         bmap.add(series_name="5G站点热力图", type_="scatter", 
-                                data_pair=valid_heatmap_data,
+                                data_pair=sample_data,
                                 symbol="circle",
                                 symbol_size=8,
                                 color="#ff6b6b")
@@ -293,17 +295,13 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 if valid_polygons:
                     try:
                         # 使用line类型绘制扇区的边界和填充
-                        # 简化参数，避免使用可能不存在的属性
+                        # 只使用最基本的参数，避免使用不支持的参数
                         bmap.add(series_name=f"{category}_扇区", type_="line", 
                                 data_pair=valid_polygons, 
                                 symbol="none", 
-                                is_polyline=True, 
-                                # 移除可能不存在的LineOpts和AreaOpts，使用简化参数
-                                line_color=color_map.get(category),
-                                line_opacity=0.7,
-                                line_width=2,
-                                area_color=color_map.get(category),
-                                area_opacity=0.2)
+                                is_polyline=True,
+                                # 只使用color参数，这是最基本的参数
+                                color=color_map.get(category))
                     except Exception as e:
                         # 如果失败，就跳过这个类别的扇区，不影响其他功能
                         st.warning(f"{category}扇区添加失败，但不影响其他功能: {str(e)}")
