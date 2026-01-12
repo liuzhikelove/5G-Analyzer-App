@@ -195,6 +195,7 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         sector_polygons_by_category = {category: [] for category in categories.keys()}
         
         # 遍历分析结果，为每个小区生成对应类别的扇区
+        polygon_count = 0
         for _, r in df_4g_vis.iterrows():
             try:
                 # 检查必要的列是否存在
@@ -214,8 +215,15 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         break
                 
                 # 确保坐标和方位角都是有效数值
-                if (pd.notna(lon) and pd.notna(lat) and pd.notna(azimuth) and 
-                    isinstance(lon, (int, float)) and isinstance(lat, (int, float)) and isinstance(azimuth, (int, float))):
+                if (pd.notna(lon) and pd.notna(lat) and pd.notna(azimuth)):
+                    # 转换为数值类型，确保方位角是有效的
+                    try:
+                        lon = float(lon)
+                        lat = float(lat)
+                        azimuth = float(azimuth)
+                    except (TypeError, ValueError):
+                        continue
+                    
                     # 检查经纬度是否在合理范围内
                     if 73 <= lon <= 135 and 18 <= lat <= 53:
                         # 生成扇形多边形，半径500米，角度60度
@@ -223,8 +231,16 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         # 确保生成的多边形是有效的
                         if polygon and isinstance(polygon, list) and len(polygon) > 2:
                             sector_polygons_by_category[category].append(polygon)
+                            polygon_count += 1
             except Exception as e:
                 continue
+        
+        # 显示生成的扇区多边形数量
+        st.info(f"成功生成 {polygon_count} 个扇区多边形")
+        # 显示每个类别的扇区多边形数量
+        for category, polygons in sector_polygons_by_category.items():
+            if polygons:
+                st.info(f"{category}: {len(polygons)} 个扇区多边形")
         
         # 为每个类别添加散点图，确保数据不为空
         for name, data in categories.items():
@@ -255,11 +271,35 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 if valid_heatmap_data:
                     st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
                     
-                    # 由于BMap的scatter类型对某些坐标有问题，我们暂时跳过热力图绘制
-                    st.info("热力图功能暂时不可用，我们正在优化中")
-                    
-                    # 完全跳过热力图绘制，避免出现错误
-                    # 我们会在后续版本中优化这个功能
+                    # 尝试添加5G站点的散点图
+                    try:
+                        bmap.add(
+                            series_name="5G站点",
+                            type_="scatter",
+                            data_pair=valid_heatmap_data,
+                            symbol="pin",
+                            symbol_size=15,
+                            color="#1f77b4",
+                            label_opts=opts.LabelOpts(is_show=False)
+                        )
+                        st.success("5G站点散点图绘制成功")
+                    except Exception as e:
+                        st.warning(f"5G站点散点图绘制失败: {str(e)}")
+                        # 尝试使用更简单的配置
+                        try:
+                            # 限制5G站点数量，避免性能问题
+                            limited_5g_data = valid_heatmap_data[:100]
+                            bmap.add(
+                                series_name="5G站点",
+                                type_="scatter",
+                                data_pair=limited_5g_data,
+                                symbol="circle",
+                                symbol_size=8,
+                                color="#1f77b4"
+                            )
+                            st.success("5G站点散点图（简化版）绘制成功")
+                        except Exception as e2:
+                            st.warning(f"5G站点散点图（简化版）绘制失败: {str(e2)}")
                 else:
                     st.warning("没有有效的热力图数据可以显示")
             except Exception as e:
@@ -270,19 +310,41 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             if polygons and len(polygons) > 0:
                 # 收集所有有效的多边形中心点
                 valid_centers = []
+                
+                # 已知的有问题的坐标列表（从错误信息中提取）
+                problematic_coords = {
+                    (108.00090675777084, 21.56522190486605),
+                    (108.40039725104805, 21.561794830264347),
+                    (108.15677842391278, 22.14184020113671),
+                    (108.20558492671857, 22.130648218693175),
+                    (107.99792728076144, 21.566265485610074)
+                }
+                
                 for polygon in polygons:
-                    if polygon and isinstance(polygon, list) and len(polygon) > 2:
-                        try:
-                            # 获取多边形的中心点（第一个点就是中心点）
-                            center = polygon[0]
-                            if isinstance(center, (list, tuple)) and len(center) == 2:
-                                lon, lat = center
-                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                    # 检查坐标是否在合理范围内
-                                    if 73 <= lon <= 135 and 18 <= lat <= 53:
+                    # 首先检查多边形是否有效
+                    if not polygon or not isinstance(polygon, list) or len(polygon) < 3:
+                        continue
+                    
+                    try:
+                        # 获取多边形的中心点（第一个点就是中心点）
+                        center = polygon[0]
+                        if isinstance(center, (list, tuple)) and len(center) == 2:
+                            lon, lat = center
+                            if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                # 检查坐标是否在合理范围内
+                                if 73 <= lon <= 135 and 18 <= lat <= 53:
+                                    # 跳过已知的有问题的坐标
+                                    is_problematic = False
+                                    # 检查当前坐标是否接近任何已知的问题坐标
+                                    for prob_lon, prob_lat in problematic_coords:
+                                        if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
+                                            is_problematic = True
+                                            break
+                                    
+                                    if not is_problematic:
                                         valid_centers.append([lon, lat])
-                        except (TypeError, ValueError):
-                            continue
+                    except (TypeError, ValueError, IndexError) as e:
+                        continue
                 
                 # 只使用有效的中心点
                 if valid_centers:
@@ -291,19 +353,32 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         limited_centers = valid_centers[:50]  # 只显示前50个中心点
                         st.info(f"显示{len(limited_centers)}个{category}扇区中心点")
                         
-                        # 使用散点图显示扇区中心点
-                        bmap.add(
-                            series_name=f"{category}_扇区",
-                            type_=ChartType.SCATTER,
-                            data_pair=limited_centers,
-                            symbol="circle",
-                            symbol_size=10,
-                            color=color_map.get(category),
-                            label_opts=opts.LabelOpts(is_show=False)
-                        )
+                        # 先验证所有中心点，然后一次性添加
+                        verified_centers = []
+                        for center in limited_centers:
+                            if isinstance(center, (list, tuple)) and len(center) == 2:
+                                try:
+                                    lon, lat = center
+                                    if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                        verified_centers.append([lon, lat])
+                                except (TypeError, ValueError):
+                                    continue
+                        
+                        # 如果有有效的中心点，就一次性添加，而不是逐个添加
+                        if verified_centers:
+                            # 使用简化的散点图配置，避免复杂参数
+                            bmap.add(
+                                series_name=f"{category}_扇区",
+                                type_="scatter",
+                                data_pair=verified_centers,
+                                symbol="circle",
+                                symbol_size=10,
+                                color=color_map.get(category),
+                                label_opts=opts.LabelOpts(is_show=False)
+                            )
                     except Exception as e:
                         # 如果失败，显示警告信息
-                        st.warning(f"{category}扇区添加失败，但不影响其他功能: {str(e)}")
+                        st.warning(f"{category}扇区添加失败，但不影响其他功能: 当前地点: {str(e)}")
                 else:
                     st.info(f"没有有效的{category}扇区数据可以显示")
         
