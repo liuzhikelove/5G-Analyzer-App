@@ -167,9 +167,13 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
         import math
         EARTH_RADIUS = 6378137.0
         
+        # 使用缓存装饰器，避免重复计算相同的扇形
+        from functools import lru_cache
+        
         # 计算距离和角度对应的坐标
-        def get_point_at_distance(lon, lat, distance_m, angle_deg):
-            """根据距离和角度获取新的坐标"""
+        @lru_cache(maxsize=10000)
+        def get_point_at_distance_cached(lon, lat, distance_m, angle_deg):
+            """根据距离和角度获取新的坐标，使用缓存避免重复计算"""
             lon_rad = math.radians(lon)
             lat_rad = math.radians(lat)
             angle_rad = math.radians(angle_deg)
@@ -184,8 +188,19 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
             
             return math.degrees(new_lon), math.degrees(new_lat)
         
-        def create_sector_shape(lon, lat, azimuth, radius_m, angle_deg=60, num_points=20):
-            """创建真实的扇形形状，通过多个点模拟圆弧边"""
+        def get_point_at_distance(lon, lat, distance_m, angle_deg):
+            """包装函数，处理浮点数精度问题后调用缓存函数"""
+            # 限制小数位数，避免因为浮点数精度问题导致缓存失效
+            lon_rounded = round(lon, 6)
+            lat_rounded = round(lat, 6)
+            distance_rounded = round(distance_m)
+            angle_rounded = round(angle_deg, 2)
+            
+            return get_point_at_distance_cached(lon_rounded, lat_rounded, distance_rounded, angle_rounded)
+        
+        @lru_cache(maxsize=5000)
+        def create_sector_shape_cached(lon, lat, azimuth, radius_m, angle_deg=60, num_points=10):
+            """创建真实的扇形形状，通过多个点模拟圆弧边，使用缓存避免重复计算"""
             # 中心点
             center = (lat, lon)
             
@@ -196,8 +211,7 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
             # 生成扇形的顶点列表
             sector_points = [center]  # 首先添加中心点
             
-            # 生成圆弧上的点
-            # 使用多个点来模拟圆弧，点越多圆弧越平滑
+            # 生成圆弧上的点，减少点数量以提高性能
             for i in range(num_points + 1):
                 # 计算当前角度
                 current_angle = start_angle + (end_angle - start_angle) * (i / num_points)
@@ -210,11 +224,22 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
             
             return sector_points
         
-        # 1. 处理4G小区 - 使用实际数据
+        def create_sector_shape(lon, lat, azimuth, radius_m, angle_deg=60, num_points=10):
+            """包装函数，处理浮点数精度问题后调用缓存函数"""
+            # 限制小数位数，避免因为浮点数精度问题导致缓存失效
+            lon_rounded = round(lon, 6)
+            lat_rounded = round(lat, 6)
+            azimuth_rounded = round(azimuth, 2)
+            radius_rounded = round(radius_m)
+            angle_rounded = round(angle_deg, 2)
+            
+            return create_sector_shape_cached(lon_rounded, lat_rounded, azimuth_rounded, radius_rounded, angle_rounded, num_points)
+        
+        # 1. 处理4G小区 - 使用实际数据，不限制数量，通过缓存提高性能
         if not df_4g_conv.empty:
             sector_layer_4g = folium.FeatureGroup(name="4G小区扇区", show=True)
             
-            # 使用实际数据生成扇区，显示所有4G扇区
+            # 使用实际数据生成扇区，不限制数量，通过缓存提高性能
             for idx, (_, r) in enumerate(df_4g_conv.iterrows()):
                 try:
                     # 获取小区数据
@@ -224,8 +249,8 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
                     cell_name = r.get('小区名称', f"4G小区_{idx}")
                     
                     if pd.notna(lon) and pd.notna(lat):
-                        # 生成真实的扇形形状
-                        sector_polygon = create_sector_shape(lon, lat, azimuth, 1000, 60, 20)  # 60度扇区，20个点模拟圆弧
+                        # 生成真实的扇形形状，使用缓存避免重复计算
+                        sector_polygon = create_sector_shape(lon, lat, azimuth, 1000, 60, 10)  # 10个点模拟圆弧，平衡性能和视觉效果
                         
                         # 添加扇区到图层
                         folium.Polygon(
@@ -234,7 +259,7 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
                             fill=True,
                             fill_color='#FF0000',
                             fill_opacity=0.7,  # 提高透明度
-                            weight=3,  # 增加边框宽度
+                            weight=2,  # 减少边框宽度以提高性能
                             tooltip=folium.Tooltip(f"4G小区: {cell_name}<br>方位角: {azimuth}°", sticky=True)
                         ).add_to(sector_layer_4g)
                 except Exception as e:
@@ -243,11 +268,11 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
             # 添加4G扇区图层到地图
             sector_layer_4g.add_to(m)
         
-        # 2. 处理5G小区 - 使用实际数据
+        # 2. 处理5G小区 - 使用实际数据，不限制数量，通过缓存提高性能
         if not df_5g_conv.empty:
             sector_layer_5g = folium.FeatureGroup(name="5G小区扇区", show=True)
             
-            # 使用实际数据生成扇区，显示所有5G扇区
+            # 使用实际数据生成扇区，不限制数量，通过缓存提高性能
             for idx, (_, r) in enumerate(df_5g_conv.iterrows()):
                 try:
                     # 获取小区数据
@@ -257,8 +282,8 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
                     cell_name = r.get('小区名称', f"5G小区_{idx}")
                     
                     if pd.notna(lon) and pd.notna(lat):
-                        # 生成真实的扇形形状
-                        sector_polygon = create_sector_shape(lon, lat, azimuth, 800, 60, 20)  # 60度扇区，20个点模拟圆弧
+                        # 生成真实的扇形形状，使用缓存避免重复计算
+                        sector_polygon = create_sector_shape(lon, lat, azimuth, 800, 60, 10)  # 10个点模拟圆弧，平衡性能和视觉效果
                         
                         # 添加扇区到图层
                         folium.Polygon(
@@ -267,7 +292,7 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
                             fill=True,
                             fill_color='#0000FF',
                             fill_opacity=0.7,  # 提高透明度
-                            weight=3,  # 增加边框宽度
+                            weight=2,  # 减少边框宽度以提高性能
                             tooltip=folium.Tooltip(f"5G小区: {cell_name}<br>方位角: {azimuth}°", sticky=True)
                         ).add_to(sector_layer_5g)
                 except Exception as e:
