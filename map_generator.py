@@ -283,7 +283,7 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                                     if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
                                         # 检查坐标是否在合理范围内
                                         if 73 <= lon <= 135 and 18 <= lat <= 53:
-                                            valid_points.append(point)
+                                            valid_points.append([lon, lat])
                                         else:
                                             is_valid_polygon = False
                                             break
@@ -308,15 +308,18 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         limited_polygons = valid_polygons[:50]  # 只显示前50个多边形
                         st.info(f"显示{len(limited_polygons)}个{category}扇区")
                         
-                        # 使用正确的方式添加扇区多边形
+                        # 使用简化的方式添加扇区多边形，避免复杂参数
                         for polygon in limited_polygons:
                             try:
-                                bmap.add(series_name=f"{category}_扇区", 
-                                        type_=ChartType.LINE, 
-                                        data_pair=polygon, 
-                                        symbol="none", 
-                                        is_polyline=True, 
-                                        color=color_map.get(category))
+                                # 只使用最基本的参数，避免使用不支持的属性
+                                bmap.add(
+                                    series_name=f"{category}_扇区",
+                                    type_=ChartType.LINE,
+                                    data_pair=polygon,
+                                    symbol="none",
+                                    is_polyline=True,
+                                    color=color_map.get(category)
+                                )
                             except Exception as e:
                                 # 如果单个多边形失败，跳过它，继续处理其他多边形
                                 continue
