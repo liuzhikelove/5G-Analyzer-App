@@ -172,19 +172,38 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
         
         # 生成Leaflet地图
         st.markdown("---"); st.subheader("🗺️ Leaflet地图可视化结果")
-        with st.spinner('正在生成Leaflet地图...'):
-            try:
-                map_error = create_folium_map(df_4g, df_5g, results_df, None)
-                
-                if map_error and isinstance(map_error, str):
-                    if "没有有效" in map_error:
-                        st.warning(map_error)
-                    elif "地图生成过程中出错" in map_error:
-                        st.error(map_error)
-                    else:
-                        st.error(f"地图生成错误：{map_error}")
-            except Exception as e:
-                st.error(f"地图生成过程中出错：{e}")
+        
+        # 添加地图生成进度提示
+        map_progress = st.progress(0)
+        map_progress.text("正在准备地图数据...")
+        
+        try:
+            # 限制数据量以提高性能
+            map_progress.progress(20)
+            map_progress.text("正在处理4G数据...")
+            
+            map_progress.progress(50)
+            map_progress.text("正在处理数据...")
+            
+            # 调用地图生成函数，使用所有数据
+            map_error = create_folium_map(df_4g, df_5g, results_df, None)
+            
+            map_progress.progress(100)
+            map_progress.text("地图生成完成！")
+            
+            # 显示地图生成结果
+            if map_error and isinstance(map_error, str):
+                if "没有有效" in map_error:
+                    st.warning(map_error)
+                elif "地图生成过程中出错" in map_error:
+                    st.error(map_error)
+                else:
+                    st.error(f"地图生成错误：{map_error}")
+        except Exception as e:
+            st.error(f"地图生成过程中出错：{e}")
+        finally:
+            # 清理进度条
+            map_progress.empty()
         
         output = BytesIO();
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
