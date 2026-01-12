@@ -1,10 +1,11 @@
-# ===== File: map_generator.py (最终稳定算法版 v2.1) =====
+erator.py (最终稳定算法版 v2.1) =====
 import pandas as pd
 from pyecharts import options as opts
-from pyecharts.charts import BMap, Scatter, HeatMap
+from pyecharts.charts import BMap, Scatter, HeatMap, Polygon
 from pyecharts.globals import BMapType
 import streamlit as st
 import math
+from algorithms import create_sector_polygon
 class CoordinateConverter:
     def __init__(self): self.x_pi = 3.14159265358979324 * 3000.0 / 180.0; self.pi = 3.1415926535897932384626; self.a = 6378245.0; self.ee = 0.00669342162296594323
     def _transform_lat(self, lng, lat): ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng)); ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0; ret += (20.0 * math.sin(lat * self.pi) + 40.0 * math.sin(lat / 3.0 * self.pi)) * 2.0 / 3.0; ret += (160.0 * math.sin(lat / 12.0 * self.pi) + 320 * math.sin(lat * self.pi / 30.0)) * 2.0 / 3.0; return ret
@@ -103,6 +104,51 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 .add_schema(baidu_ak=baidu_ak, center=[center_lon, center_lat], zoom=14, is_roam=True))
         
         color_map = {'共站址5G分流小区': '#28a745','共站址5G射频调优小区': '#ffc107','非共站址5G分流小区': '#17a2b8','5G规划建设': '#dc3545','其他': '#6c757d'}
+        
+        # 按分析结果分类生成扇区多边形
+        sector_polygons_by_category = {category: [] for category in categories.keys()}
+        
+        # 遍历分析结果，为每个小区生成对应类别的扇区
+        for _, r in df_4g_vis.iterrows():
+            try:
+                lon = r['b_lon']
+                lat = r['b_lat']
+                azimuth = r['方位角']
+                analysis_result = r.get('分析结果', '')
+                
+                # 确定小区所属类别
+                category = '其他'  # 默认类别
+                for cat_key in categories.keys():
+                    if cat_key in analysis_result:
+                        category = cat_key
+                        break
+                
+                # 确保坐标和方位角都是有效数值
+                if pd.notna(lon) and pd.notna(lat) and pd.notna(azimuth):
+                    # 生成扇形多边形，半径500米，角度60度
+                    polygon = create_sector_polygon(lon, lat, azimuth, 500, 60)
+                    sector_polygons_by_category[category].append(polygon)
+            except Exception as e:
+                continue
+        
+        # 为每个类别添加扇区多边形到地图
+        for category, polygons in sector_polygons_by_category.items():
+            if polygons:
+                try:
+                    bmap.add(
+                        series_name=category,
+                        type_="polygon",
+                        data_pair=polygons,
+                        itemstyle_opts=opts.ItemStyleOpts(
+                            color=color_map.get(category, "#6c757d"),
+                            opacity=0.5,  # 设置透明度
+                            border_color=color_map.get(category, "#6c757d"),
+                            border_width=1
+                        ),
+                        label_opts=opts.LabelOpts(is_show=False)
+                    )
+                except Exception as e:
+                    pass
         
         # 为每个类别添加散点图，确保数据不为空
         for name, data in categories.items():
