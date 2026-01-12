@@ -66,7 +66,8 @@ def convert_coords_for_baidu(_df):
     df['经度'] = pd.to_numeric(df['经度'], errors='coerce'); df['纬度'] = pd.to_numeric(df['纬度'], errors='coerce'); df.dropna(subset=['经度', '纬度'], inplace=True)
     if df.empty: return pd.DataFrame()
     converted_coords = []; failed_rows = 0
-    for lon, lat in zip(df['经度'], df['纬度']):
+    
+    for index, (lon, lat) in enumerate(zip(df['经度'], df['纬度'])):
         try:
             # 先检查经纬度是否有效
             if pd.isna(lon) or pd.isna(lat):
@@ -74,26 +75,56 @@ def convert_coords_for_baidu(_df):
                 converted_coords.append((None, None))
                 continue
             
-            # 尝试坐标转换，捕获所有可能的异常
-            result1 = coord_converter.wgs84_to_gcj02(lon, lat)
-            if result1 is None:
-                failed_rows += 1
-                converted_coords.append((None, None))
-                continue
-            gcj_lon, gcj_lat = result1
+            # 特别检查错误信息中提到的坐标
+            if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
+                st.info(f"正在处理问题坐标: ({lon}, {lat})")
             
-            result2 = coord_converter.gcj02_to_bd09(gcj_lon, gcj_lat)
-            if result2 is None:
+            # 尝试坐标转换，捕获所有可能的异常
+            try:
+                result1 = coord_converter.wgs84_to_gcj02(lon, lat)
+                if result1 is None:
+                    failed_rows += 1
+                    converted_coords.append((None, None))
+                    continue
+                gcj_lon, gcj_lat = result1
+            except Exception as e:
                 failed_rows += 1
                 converted_coords.append((None, None))
+                if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
+                    st.info(f"WGS84到GCJ02转换失败: {str(e)}")
                 continue
-            bd_lon, bd_lat = result2
+            
+            try:
+                result2 = coord_converter.gcj02_to_bd09(gcj_lon, gcj_lat)
+                if result2 is None:
+                    failed_rows += 1
+                    converted_coords.append((None, None))
+                    continue
+                bd_lon, bd_lat = result2
+            except Exception as e:
+                failed_rows += 1
+                converted_coords.append((None, None))
+                if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
+                    st.info(f"GCJ02到BD09转换失败: {str(e)}")
+                continue
             
             converted_coords.append((bd_lon, bd_lat))
         except Exception as e: 
             failed_rows += 1
             converted_coords.append((None, None))
+            if abs(lon - 108.15677842391278) < 0.0001 and abs(lat - 22.14184020113671) < 0.0001:
+                st.info(f"坐标转换过程中发生异常: {str(e)}")
+    
     if failed_rows > 0: st.warning(f"**数据警告**: 在坐标转换过程中，有 **{failed_rows}** 行数据因格式无效而被跳过。")
+    
+    # 检查转换后的坐标是否有效
+    valid_coords = 0
+    for c in converted_coords:
+        if c[0] is not None and c[1] is not None:
+            valid_coords += 1
+    
+    st.info(f"坐标转换完成: 总处理 {len(df)} 行，成功转换 {valid_coords} 行，失败 {failed_rows} 行")
+    
     df['b_lon'] = [c[0] for c in converted_coords]; df['b_lat'] = [c[1] for c in converted_coords]; df.dropna(subset=['b_lon', 'b_lat'], inplace=True)
     return df
 def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
@@ -208,16 +239,34 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         # 添加热力图，确保数据不为空
         if heatmap_data_5g and len(heatmap_data_5g) > 0:
             try:
-                # 使用散点图模拟热力图效果
-                bmap.add(series_name="5G站点热力图", type_="scatter", 
-                        data_pair=heatmap_data_5g, 
-                        symbol="circle", 
-                        symbol_size=10, 
-                        color="#ff6b6b",
-                        label_opts=opts.LabelOpts(is_show=False),
-                        itemstyle_opts=opts.ItemStyleOpts(opacity=0.6))
+                # 先检查热力图数据的格式是否正确
+                valid_heatmap_data = []
+                for point in heatmap_data_5g:
+                    if isinstance(point, (list, tuple)) and len(point) == 2:
+                        lon, lat = point
+                        if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                            valid_heatmap_data.append(point)
+                
+                # 只使用有效的热力图数据
+                if valid_heatmap_data:
+                    # 使用散点图模拟热力图效果
+                    bmap.add(series_name="5G站点热力图", type_="scatter", 
+                            data_pair=valid_heatmap_data, 
+                            symbol="circle", 
+                            symbol_size=10, 
+                            color="#ff6b6b",
+                            label_opts=opts.LabelOpts(is_show=False),
+                            itemstyle_opts=opts.ItemStyleOpts(opacity=0.6))
+                else:
+                    st.warning("没有有效的热力图数据可以显示")
             except Exception as e:
                 st.warning(f"热力图添加失败: {str(e)}")
+                # 显示更详细的错误信息，帮助调试
+                st.info(f"错误详情: {type(e).__name__} - {str(e)}")
+                st.info(f"热力图数据长度: {len(heatmap_data_5g)}")
+                if heatmap_data_5g:
+                    st.info(f"第一个数据点: {heatmap_data_5g[0]}")
+                    st.info(f"第一个数据点类型: {type(heatmap_data_5g[0])}")
         
         # 添加扇区图层，使用line类型绘制多边形
         for category, polygons in sector_polygons_by_category.items():
