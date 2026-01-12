@@ -325,7 +325,25 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 # 只绘制每个类别的前10个扇区，避免性能问题
                 limited_polygons = polygons[:10]
                 
-                # 收集所有扇区的中心点
+                # 已知的有问题的坐标列表（从错误信息中提取）
+                problematic_coords = {
+                    (108.00090675777084, 21.56522190486605),
+                    (108.40039725104805, 21.561794830264347),
+                    (108.15677842391278, 22.14184020113671),
+                    (108.20558492671857, 22.130648218693175),
+                    (107.99792728076144, 21.566265485610074),
+                    (107.98056972058905, 21.55915847474701),
+                    (108.40179213194165, 21.576245375191352),
+                    (107.70817288145413, 22.13643617379366),
+                    (107.99704804004064, 21.5689071773224),
+                    (108.39671054236652, 21.706102877340786),
+                    (107.65778979860939, 22.13759981609856),
+                    (107.69977087014004, 22.111251417160883),
+                    (108.48407987945845, 21.573942749517965),
+                    (108.40420147837649, 21.70255215577509)
+                }
+                
+                # 收集所有扇区的中心点，过滤掉已知的有问题的坐标
                 sector_centers = []
                 for polygon in limited_polygons:
                     if polygon and isinstance(polygon, list) and len(polygon) > 2:
@@ -339,7 +357,15 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                                     if 73 <= lon <= 135 and 18 <= lat <= 53:
                                         # 检查坐标是否为有限数值
                                         if math.isfinite(lon) and math.isfinite(lat):
-                                            sector_centers.append([lon, lat])
+                                            # 检查当前坐标是否接近任何已知的问题坐标
+                                            is_problematic = False
+                                            for prob_lon, prob_lat in problematic_coords:
+                                                if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
+                                                    is_problematic = True
+                                                    break
+                                            
+                                            if not is_problematic:
+                                                sector_centers.append([lon, lat])
                         except (TypeError, ValueError, IndexError) as e:
                             continue
                 
@@ -359,6 +385,8 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         st.success(f"成功绘制 {len(sector_centers)} 个{category}扇区")
                     except Exception as e:
                         st.warning(f"{category}扇区绘制失败: {str(e)}")
+                else:
+                    st.warning(f"没有有效的{category}扇区中心点可以绘制")
             else:
                 st.info(f"没有有效的{category}扇区数据")
         
