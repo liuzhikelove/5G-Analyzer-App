@@ -1,7 +1,7 @@
 # ===== File: map_generator.py (最终稳定算法版 v2.1) =====
 import pandas as pd
 from pyecharts import options as opts
-from pyecharts.charts import BMap, Scatter, HeatMap, Polygon
+from pyecharts.charts import BMap, Scatter, HeatMap
 from pyecharts.globals import BMapType
 import streamlit as st
 import math
