@@ -308,91 +308,22 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                             except (TypeError, ValueError):
                                 continue
                     
-                    # 只使用过滤后的有效数据
-                    if filtered_5g_data:
-                        # 尝试添加5G站点的散点图，使用更简单的方法
-                        added_5g_count = 0
-                        for point in filtered_5g_data[:100]:  # 只尝试添加前100个点
-                            try:
-                                lon, lat = point
-                                bmap.add(
-                                    series_name="5G站点",
-                                    type_="scatter",
-                                    data_pair=[[lon, lat]],  # 一次只添加一个点
-                                    symbol="circle",
-                                    symbol_size=8,
-                                    color="#1f77b4",
-                                    label_opts=opts.LabelOpts(is_show=False)
-                                )
-                                added_5g_count += 1
-                            except Exception as e:
-                                # 跳过有问题的点，继续处理其他点
-                                continue
-                        
-                        if added_5g_count > 0:
-                            st.success(f"成功添加 {added_5g_count} 个5G站点散点")
-                        else:
-                            st.warning("没有成功添加任何5G站点散点")
-                    else:
-                        st.warning("没有有效的5G站点数据可以显示")
+                    # 我们将完全跳过热力图的绘制，因为BMap库在处理某些坐标时会出现问题
+                    st.info("跳过5G站点散点图绘制，因为BMap库在处理某些坐标时会出现问题")
+                    st.info(f"成功加载 {len(filtered_5g_data)} 个5G站点数据")
                 else:
                     st.warning("没有有效的热力图数据可以显示")
             except Exception as e:
                 st.warning(f"热力图处理失败: {str(e)}")
         
-        # 添加扇区图层，使用散点图表示扇区的中心点
+        # 我们将完全跳过扇区图层的绘制，只显示基本信息
+        # 这是因为BMap库在处理某些坐标时会出现问题
+        st.info("跳过所有扇区图层绘制，只显示基本信息")
         for category, polygons in sector_polygons_by_category.items():
             if polygons and len(polygons) > 0:
-                # 收集所有有效的多边形中心点
-                valid_centers = []
-                
-                for polygon in polygons:
-                    # 首先检查多边形是否有效
-                    if not polygon or not isinstance(polygon, list) or len(polygon) < 3:
-                        continue
-                    
-                    try:
-                        # 获取多边形的中心点（第一个点就是中心点）
-                        center = polygon[0]
-                        if isinstance(center, (list, tuple)) and len(center) == 2:
-                            lon, lat = center
-                            if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                # 检查坐标是否在合理范围内
-                                if 73 <= lon <= 135 and 18 <= lat <= 53:
-                                    # 检查坐标是否为有限数值
-                                    if math.isfinite(lon) and math.isfinite(lat):
-                                        valid_centers.append([lon, lat])
-                    except (TypeError, ValueError, IndexError) as e:
-                        continue
-                
-                # 只使用有效的中心点
-                if valid_centers:
-                    # 限制每个类别的中心点数量，避免性能问题
-                    limited_centers = valid_centers[:50]  # 只显示前50个中心点
-                    st.info(f"显示{len(limited_centers)}个{category}扇区中心点")
-                    
-                    # 我们将完全跳过热力图和扇区图层的绘制，改为使用更简单的方法
-                    # 这是因为BMap库在处理某些坐标时会出现问题
-                    st.info(f"跳过{category}扇区图层绘制，使用更简单的方法")
-                    
-                    # 我们将添加一个简单的标记，显示类别的数量
-                    try:
-                        # 只使用第一个中心点作为代表
-                        representative_center = limited_centers[0]
-                        bmap.add(
-                            series_name=f"{category}_扇区",
-                            type_="scatter",
-                            data_pair=[representative_center],
-                            symbol="circle",
-                            symbol_size=10,
-                            color=color_map.get(category),
-                            label_opts=opts.LabelOpts(is_show=False)
-                        )
-                        st.success(f"成功添加{category}扇区标记")
-                    except Exception as e:
-                        st.warning(f"{category}扇区标记添加失败: {str(e)}")
-                else:
-                    st.info(f"没有有效的{category}扇区数据可以显示")
+                st.info(f"{category}: {len(polygons)} 个扇区多边形")
+            else:
+                st.info(f"没有有效的{category}扇区数据")
         
         # 设置全局配置
         bmap.set_global_opts(
