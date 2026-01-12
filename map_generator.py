@@ -265,64 +265,42 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             except Exception as e:
                 st.warning(f"热力图处理失败: {str(e)}")
         
-        # 添加扇区图层，使用line类型绘制多边形
+        # 添加扇区图层，使用散点图表示扇区的中心点
         for category, polygons in sector_polygons_by_category.items():
             if polygons and len(polygons) > 0:
-                # 收集所有有效的多边形点
-                valid_polygons = []
+                # 收集所有有效的多边形中心点
+                valid_centers = []
                 for polygon in polygons:
                     if polygon and isinstance(polygon, list) and len(polygon) > 2:
-                        # 检查多边形的每个点是否有效
-                        valid_points = []
-                        is_valid_polygon = True
-                        
-                        for point in polygon:
-                            if isinstance(point, (list, tuple)) and len(point) == 2:
-                                try:
-                                    lon, lat = point
-                                    if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                        # 检查坐标是否在合理范围内
-                                        if 73 <= lon <= 135 and 18 <= lat <= 53:
-                                            valid_points.append([lon, lat])
-                                        else:
-                                            is_valid_polygon = False
-                                            break
-                                    else:
-                                        is_valid_polygon = False
-                                        break
-                                except (TypeError, ValueError):
-                                    is_valid_polygon = False
-                                    break
-                            else:
-                                is_valid_polygon = False
-                                break
-                        
-                        # 如果多边形有足够的有效点，就添加到有效列表中
-                        if is_valid_polygon and len(valid_points) > 2:
-                            valid_polygons.append(valid_points)
+                        try:
+                            # 获取多边形的中心点（第一个点就是中心点）
+                            center = polygon[0]
+                            if isinstance(center, (list, tuple)) and len(center) == 2:
+                                lon, lat = center
+                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                    # 检查坐标是否在合理范围内
+                                    if 73 <= lon <= 135 and 18 <= lat <= 53:
+                                        valid_centers.append([lon, lat])
+                        except (TypeError, ValueError):
+                            continue
                 
-                # 只使用有效的多边形
-                if valid_polygons:
+                # 只使用有效的中心点
+                if valid_centers:
                     try:
-                        # 限制每个类别的多边形数量，避免性能问题
-                        limited_polygons = valid_polygons[:50]  # 只显示前50个多边形
-                        st.info(f"显示{len(limited_polygons)}个{category}扇区")
+                        # 限制每个类别的中心点数量，避免性能问题
+                        limited_centers = valid_centers[:50]  # 只显示前50个中心点
+                        st.info(f"显示{len(limited_centers)}个{category}扇区中心点")
                         
-                        # 使用简化的方式添加扇区多边形，避免复杂参数
-                        for polygon in limited_polygons:
-                            try:
-                                # 只使用最基本的参数，避免使用不支持的属性
-                                bmap.add(
-                                    series_name=f"{category}_扇区",
-                                    type_=ChartType.LINE,
-                                    data_pair=polygon,
-                                    symbol="none",
-                                    is_polyline=True,
-                                    color=color_map.get(category)
-                                )
-                            except Exception as e:
-                                # 如果单个多边形失败，跳过它，继续处理其他多边形
-                                continue
+                        # 使用散点图显示扇区中心点
+                        bmap.add(
+                            series_name=f"{category}_扇区",
+                            type_=ChartType.SCATTER,
+                            data_pair=limited_centers,
+                            symbol="circle",
+                            symbol_size=10,
+                            color=color_map.get(category),
+                            label_opts=opts.LabelOpts(is_show=False)
+                        )
                     except Exception as e:
                         # 如果失败，显示警告信息
                         st.warning(f"{category}扇区添加失败，但不影响其他功能: {str(e)}")
