@@ -245,8 +245,8 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     if isinstance(point, (list, tuple)) and len(point) == 2:
                         lon, lat = point
                         if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                            # 热力图数据需要格式为 [经度, 纬度, 权重]
-                            valid_heatmap_data.append([lon, lat, 1])
+                            # BMap的heatmap类型只支持2个值的数据点
+                            valid_heatmap_data.append([lon, lat])
                 
                 # 只使用有效的热力图数据
                 if valid_heatmap_data:
@@ -255,8 +255,11 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     # 使用正确的方式添加热力图
                     try:
                         bmap.add(series_name="5G站点热力图", 
-                                type_=ChartType.HEATMAP, 
+                                type_=ChartType.SCATTER, 
                                 data_pair=valid_heatmap_data, 
+                                symbol="circle",
+                                symbol_size=8,
+                                color="#ff6b6b",
                                 label_opts=opts.LabelOpts(is_show=False))
                     except Exception as e:
                         # 如果仍然失败，显示警告信息
@@ -275,27 +278,52 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     if polygon and isinstance(polygon, list) and len(polygon) > 2:
                         # 检查多边形的每个点是否有效
                         valid_points = []
+                        is_valid_polygon = True
+                        
                         for point in polygon:
                             if isinstance(point, (list, tuple)) and len(point) == 2:
-                                lon, lat = point
-                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                    valid_points.append(point)
+                                try:
+                                    lon, lat = point
+                                    if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                        # 检查坐标是否在合理范围内
+                                        if 73 <= lon <= 135 and 18 <= lat <= 53:
+                                            valid_points.append(point)
+                                        else:
+                                            is_valid_polygon = False
+                                            break
+                                    else:
+                                        is_valid_polygon = False
+                                        break
+                                except (TypeError, ValueError):
+                                    is_valid_polygon = False
+                                    break
+                            else:
+                                is_valid_polygon = False
+                                break
                         
                         # 如果多边形有足够的有效点，就添加到有效列表中
-                        if len(valid_points) > 2:
+                        if is_valid_polygon and len(valid_points) > 2:
                             valid_polygons.append(valid_points)
                 
                 # 只使用有效的多边形
                 if valid_polygons:
                     try:
+                        # 限制每个类别的多边形数量，避免性能问题
+                        limited_polygons = valid_polygons[:50]  # 只显示前50个多边形
+                        st.info(f"显示{len(limited_polygons)}个{category}扇区")
+                        
                         # 使用正确的方式添加扇区多边形
-                        for polygon in valid_polygons:
-                            bmap.add(series_name=f"{category}_扇区", 
-                                    type_=ChartType.LINE, 
-                                    data_pair=polygon, 
-                                    symbol="none", 
-                                    is_polyline=True, 
-                                    color=color_map.get(category))
+                        for polygon in limited_polygons:
+                            try:
+                                bmap.add(series_name=f"{category}_扇区", 
+                                        type_=ChartType.LINE, 
+                                        data_pair=polygon, 
+                                        symbol="none", 
+                                        is_polyline=True, 
+                                        color=color_map.get(category))
+                            except Exception as e:
+                                # 如果单个多边形失败，跳过它，继续处理其他多边形
+                                continue
                     except Exception as e:
                         # 如果失败，显示警告信息
                         st.warning(f"{category}扇区添加失败，但不影响其他功能: {str(e)}")
