@@ -322,81 +322,45 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             if polygons and len(polygons) > 0:
                 st.info(f"{category}: {len(polygons)} 个扇区多边形")
                 
-                # 只绘制每个类别的前10个扇区，避免性能问题
-                limited_polygons = polygons[:10]
+                # 简化扇区绘制逻辑，不再过滤坐标，直接尝试绘制
+                # 我们将使用更简单的方法，只绘制每个类别的几个扇区
+                st.info(f"开始绘制{category}扇区图层")
                 
-                # 已知的有问题的坐标列表（从错误信息中提取）
-                problematic_coords = {
-                    (108.00090675777084, 21.56522190486605),
-                    (108.40039725104805, 21.561794830264347),
-                    (108.15677842391278, 22.14184020113671),
-                    (108.20558492671857, 22.130648218693175),
-                    (107.99792728076144, 21.566265485610074),
-                    (107.98056972058905, 21.55915847474701),
-                    (108.40179213194165, 21.576245375191352),
-                    (107.70817288145413, 22.13643617379366),
-                    (107.99704804004064, 21.5689071773224),
-                    (108.39671054236652, 21.706102877340786),
-                    (107.65778979860939, 22.13759981609856),
-                    (107.69977087014004, 22.111251417160883),
-                    (108.48407987945845, 21.573942749517965),
-                    (108.40420147837649, 21.70255215577509),
-                    (107.99223817723727, 21.562211409497472)  # 新添加的问题坐标
-                }
+                # 只尝试绘制前5个扇区
+                test_polygons = polygons[:5]
+                added_count = 0
                 
-                # 收集所有扇区的中心点，过滤掉已知的有问题的坐标
-                sector_centers = []
-                for polygon in limited_polygons:
-                    if polygon and isinstance(polygon, list) and len(polygon) > 2:
-                        try:
+                for polygon in test_polygons:
+                    try:
+                        if polygon and isinstance(polygon, list) and len(polygon) > 2:
                             # 获取扇区的中心点（第一个点）
                             center = polygon[0]
                             if isinstance(center, (list, tuple)) and len(center) == 2:
                                 lon, lat = center
                                 if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
-                                    # 检查坐标是否在合理范围内
+                                    # 只检查坐标是否在合理范围内，不再过滤具体坐标
                                     if 73 <= lon <= 135 and 18 <= lat <= 53:
-                                        # 检查坐标是否为有限数值
-                                        if math.isfinite(lon) and math.isfinite(lat):
-                                            # 检查当前坐标是否接近任何已知的问题坐标
-                                            is_problematic = False
-                                            for prob_lon, prob_lat in problematic_coords:
-                                                if abs(lon - prob_lon) < 0.0001 and abs(lat - prob_lat) < 0.0001:
-                                                    is_problematic = True
-                                                    break
-                                            
-                                            if not is_problematic:
-                                                sector_centers.append([lon, lat])
-                        except (TypeError, ValueError, IndexError) as e:
-                            continue
+                                        # 尝试绘制这个扇区
+                                        try:
+                                            bmap.add(
+                                                series_name=f"{category}_扇区",
+                                                type_="scatter",
+                                                data_pair=[[lon, lat]],
+                                                symbol="circle",
+                                                symbol_size=10,
+                                                color=color_map.get(category),
+                                                label_opts=opts.LabelOpts(is_show=False)
+                                            )
+                                            added_count += 1
+                                        except Exception as e:
+                                            continue
+                    except (TypeError, ValueError, IndexError) as e:
+                        continue
                 
-                # 如果有有效的扇区中心点，就绘制它们，逐个添加，跳过有问题的点
-                if sector_centers:
-                    added_count = 0
-                    # 逐个添加扇区中心点，跳过有问题的点
-                    for center in sector_centers:
-                        try:
-                            # 使用简化的散点图配置，避免复杂参数
-                            bmap.add(
-                                series_name=f"{category}_扇区",
-                                type_="scatter",
-                                data_pair=[center],  # 一次只添加一个点
-                                symbol="circle",
-                                symbol_size=10,
-                                color=color_map.get(category),
-                                label_opts=opts.LabelOpts(is_show=False)
-                            )
-                            added_count += 1
-                        except Exception as e:
-                            # 跳过有问题的点，继续处理其他点
-                            continue
-                    
-                    if added_count > 0:
-                        st.success(f"成功绘制 {added_count} 个{category}扇区")
-                    else:
-                        st.warning(f"没有成功绘制任何{category}扇区")
+                if added_count > 0:
+                    st.success(f"成功绘制 {added_count} 个{category}扇区")
                 else:
-                    st.warning(f"没有有效的{category}扇区中心点可以绘制")
+                    st.warning(f"没有成功绘制任何{category}扇区")
             else:
                 st.info(f"没有有效的{category}扇区数据")
         
