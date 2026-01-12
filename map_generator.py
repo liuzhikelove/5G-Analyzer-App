@@ -249,40 +249,60 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 
                 # 只使用有效的热力图数据
                 if valid_heatmap_data:
-                    # 使用散点图模拟热力图效果
-                    bmap.add(series_name="5G站点热力图", type_="scatter", 
-                            data_pair=valid_heatmap_data, 
-                            symbol="circle", 
-                            symbol_size=10, 
-                            color="#ff6b6b",
-                            label_opts=opts.LabelOpts(is_show=False),
-                            itemstyle_opts=opts.ItemStyleOpts(opacity=0.6))
+                    # 由于BMap的scatter类型也可能失败，我们使用更简单的方式
+                    # 直接跳过热力图，或者使用其他方式显示
+                    st.info(f"成功加载 {len(valid_heatmap_data)} 个5G站点数据")
+                    
+                    # 尝试使用BMap的point类型或者其他支持的类型
+                    try:
+                        # 使用简化的散点图参数
+                        bmap.add(series_name="5G站点热力图", type_="scatter", 
+                                data_pair=valid_heatmap_data,
+                                symbol="circle",
+                                symbol_size=8,
+                                color="#ff6b6b")
+                    except Exception as e:
+                        # 如果仍然失败，就跳过热力图，不影响其他功能
+                        st.warning(f"热力图添加失败，但不影响其他功能: {str(e)}")
                 else:
                     st.warning("没有有效的热力图数据可以显示")
             except Exception as e:
-                st.warning(f"热力图添加失败: {str(e)}")
-                # 显示更详细的错误信息，帮助调试
-                st.info(f"错误详情: {type(e).__name__} - {str(e)}")
-                st.info(f"热力图数据长度: {len(heatmap_data_5g)}")
-                if heatmap_data_5g:
-                    st.info(f"第一个数据点: {heatmap_data_5g[0]}")
-                    st.info(f"第一个数据点类型: {type(heatmap_data_5g[0])}")
+                st.warning(f"热力图处理失败: {str(e)}")
         
         # 添加扇区图层，使用line类型绘制多边形
         for category, polygons in sector_polygons_by_category.items():
             if polygons and len(polygons) > 0:
-                for i, polygon in enumerate(polygons):
-                    if polygon and len(polygon) > 2:
-                        try:
-                            # 使用line类型绘制扇区的边界和填充
-                            bmap.add(series_name=f"{category}_扇区", type_="line", 
-                                    data_pair=polygon, 
-                                    symbol="none", 
-                                    is_polyline=True, 
-                                    line_opts=opts.LineOpts(color=color_map.get(category), opacity=0.7, width=2),
-                                    area_opts=opts.AreaOpts(color=color_map.get(category), opacity=0.2))
-                        except Exception as e:
-                            continue
+                # 收集所有有效的多边形点
+                valid_polygons = []
+                for polygon in polygons:
+                    if polygon and isinstance(polygon, list) and len(polygon) > 2:
+                        # 检查多边形的每个点是否有效
+                        valid_points = []
+                        for point in polygon:
+                            if isinstance(point, (list, tuple)) and len(point) == 2:
+                                lon, lat = point
+                                if isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                                    valid_points.append(point)
+                        
+                        # 如果多边形有足够的有效点，就添加到有效列表中
+                        if len(valid_points) > 2:
+                            valid_polygons.append(valid_points)
+                
+                # 只使用有效的多边形
+                if valid_polygons:
+                    try:
+                        # 使用line类型绘制扇区的边界和填充
+                        bmap.add(series_name=f"{category}_扇区", type_="line", 
+                                data_pair=valid_polygons, 
+                                symbol="none", 
+                                is_polyline=True, 
+                                line_opts=opts.LineOpts(color=color_map.get(category), opacity=0.7, width=2),
+                                area_opts=opts.AreaOpts(color=color_map.get(category), opacity=0.2))
+                    except Exception as e:
+                        # 如果失败，就跳过这个类别的扇区，不影响其他功能
+                        st.warning(f"{category}扇区添加失败，但不影响其他功能: {str(e)}")
+                else:
+                    st.info(f"没有有效的{category}扇区数据可以显示")
         
         # 设置全局配置
         bmap.set_global_opts(
