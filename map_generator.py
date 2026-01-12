@@ -131,15 +131,6 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
             except Exception as e:
                 continue
         
-        # 注意：BMap的add方法不直接支持polygon类型，我们需要使用自定义图层或其他方式
-        # 让我们修改策略，直接在地图上添加覆盖物
-        # 首先添加散点图，然后添加扇区多边形作为自定义覆盖物
-        # 但是由于pyecharts的BMap不直接支持自定义多边形覆盖物，我们需要调整方案
-        
-        # 让我们简化实现，只显示散点图，不再显示扇区
-        # 注释掉扇区生成和添加的代码，因为当前pyecharts版本的BMap不支持直接添加polygon
-        pass
-        
         # 为每个类别添加散点图，确保数据不为空
         for name, data in categories.items():
             if data and len(data) > 0:
@@ -153,10 +144,29 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         # 添加热力图，确保数据不为空
         if heatmap_data_5g and len(heatmap_data_5g) > 0:
             try:
+                # 使用正确的热力图添加方式
                 bmap.add(series_name="5G站点热力图", type_="heatmap", 
-                        data_pair=heatmap_data_5g, point_size=5, blur_size=15)
+                        data_pair=heatmap_data_5g, 
+                        label_opts=opts.LabelOpts(is_show=False),
+                        emphasis_opts=opts.ItemStyleOpts(color="#ff6b6b"))
             except Exception as e:
-                pass
+                st.warning(f"热力图添加失败: {str(e)}")
+        
+        # 添加扇区图层，使用line类型绘制多边形
+        for category, polygons in sector_polygons_by_category.items():
+            if polygons and len(polygons) > 0:
+                for i, polygon in enumerate(polygons):
+                    if polygon and len(polygon) > 2:
+                        try:
+                            # 使用line类型绘制扇区的边界和填充
+                            bmap.add(series_name=f"{category}_扇区", type_="line", 
+                                    data_pair=polygon, 
+                                    symbol=None, 
+                                    is_polyline=True, 
+                                    line_opts=opts.LineOpts(color=color_map.get(category), opacity=0.7, width=2),
+                                    area_opts=opts.AreaOpts(color=color_map.get(category), opacity=0.2))
+                        except Exception as e:
+                            continue
         
         # 设置全局配置
         bmap.set_global_opts(
