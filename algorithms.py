@@ -34,35 +34,48 @@ def create_sector_polygon(lon, lat, azimuth, radius_m, angle_deg):
     """
     根据中心点、方位角、半径和角度，生成扇形多边形的顶点坐标列表。
     """
-    # 地球半径（米）
-    EARTH_RADIUS = 6378137.0
-    
-    # 将角度转换为弧度
-    azimuth_rad = math.radians(azimuth)
-    angle_rad = math.radians(angle_deg)
-    
-    # 计算扇区左右两边的起始和结束角度
-    start_angle = azimuth_rad - angle_rad / 2
-    end_angle = azimuth_rad + angle_rad / 2
-    
-    # 扇形弧上的点数量，越多越平滑
-    steps = 20
-    
-    # 顶点列表，第一个点是中心点
-    points = [[lon, lat]]
-    
-    # 计算弧上的所有点
-    for i in range(steps + 1):
-        current_angle = start_angle + (end_angle - start_angle) * i / steps
+    try:
+        # 检查输入参数是否有效
+        if (not isinstance(lon, (int, float)) or not isinstance(lat, (int, float)) or 
+            not isinstance(azimuth, (int, float)) or not isinstance(radius_m, (int, float)) or 
+            not isinstance(angle_deg, (int, float))):
+            return None
         
-        lat_offset = (radius_m * math.cos(current_angle)) / EARTH_RADIUS
-        lon_offset = (radius_m * math.sin(current_angle)) / (EARTH_RADIUS * math.cos(math.radians(lat)))
+        # 地球半径（米）
+        EARTH_RADIUS = 6378137.0
         
-        new_lat = lat + math.degrees(lat_offset)
-        new_lon = lon + math.degrees(lon_offset)
+        # 将角度转换为弧度
+        azimuth_rad = math.radians(azimuth)
+        angle_rad = math.radians(angle_deg)
         
-        points.append([new_lon, new_lat])
+        # 计算扇区左右两边的起始和结束角度
+        start_angle = azimuth_rad - angle_rad / 2
+        end_angle = azimuth_rad + angle_rad / 2
         
-    points.append([lon, lat])
-    
-    return points
+        # 扇形弧上的点数量，越多越平滑
+        steps = 20
+        
+        # 顶点列表，第一个点是中心点
+        points = [[lon, lat]]
+        
+        # 计算弧上的所有点
+        for i in range(steps + 1):
+            current_angle = start_angle + (end_angle - start_angle) * i / steps
+            
+            # 计算经纬度偏移量
+            lat_offset = (radius_m * math.cos(current_angle)) / EARTH_RADIUS
+            lon_offset = (radius_m * math.sin(current_angle)) / (EARTH_RADIUS * math.cos(math.radians(lat)))
+            
+            # 计算新的经纬度
+            new_lat = lat + math.degrees(lat_offset)
+            new_lon = lon + math.degrees(lon_offset)
+            
+            points.append([new_lon, new_lat])
+            
+        # 闭合多边形
+        points.append([lon, lat])
+        
+        return points
+    except Exception as e:
+        # 如果出现任何错误，返回None
+        return None
