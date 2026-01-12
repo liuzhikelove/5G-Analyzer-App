@@ -92,7 +92,7 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 try:
                     lon = r['b_lon']; lat = r['b_lat']
                     if pd.notna(lon) and pd.notna(lat) and 73 <= lon <= 135 and 18 <= lat <= 53:
-                        heatmap_data_5g.append([lon, lat, 1])
+                        heatmap_data_5g.append([lon, lat])  # 只添加经度和纬度，不添加权重
                 except Exception as e:
                     continue
         
@@ -144,10 +144,14 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         # 添加热力图，确保数据不为空
         if heatmap_data_5g and len(heatmap_data_5g) > 0:
             try:
-                # 使用简化的热力图添加方式，只使用支持的参数
-                bmap.add(series_name="5G站点热力图", type_="heatmap", 
+                # 使用散点图模拟热力图效果
+                bmap.add(series_name="5G站点热力图", type_="scatter", 
                         data_pair=heatmap_data_5g, 
-                        label_opts=opts.LabelOpts(is_show=False))
+                        symbol="circle", 
+                        symbol_size=10, 
+                        color="#ff6b6b",
+                        label_opts=opts.LabelOpts(is_show=False),
+                        itemstyle_opts=opts.ItemStyleOpts(opacity=0.6))
             except Exception as e:
                 st.warning(f"热力图添加失败: {str(e)}")
         
