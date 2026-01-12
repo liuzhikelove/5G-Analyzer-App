@@ -7,11 +7,57 @@ import streamlit as st
 import math
 from algorithms import create_sector_polygon
 class CoordinateConverter:
-    def __init__(self): self.x_pi = 3.14159265358979324 * 3000.0 / 180.0; self.pi = 3.1415926535897932384626; self.a = 6378245.0; self.ee = 0.00669342162296594323
-    def _transform_lat(self, lng, lat): ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng)); ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0; ret += (20.0 * math.sin(lat * self.pi) + 40.0 * math.sin(lat / 3.0 * self.pi)) * 2.0 / 3.0; ret += (160.0 * math.sin(lat / 12.0 * self.pi) + 320 * math.sin(lat * self.pi / 30.0)) * 2.0 / 3.0; return ret
-    def _transform_lng(self, lng, lat): ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng)); ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0; ret += (20.0 * math.sin(lng * self.pi) + 40.0 * math.sin(lng / 3.0 * self.pi)) * 2.0 / 3.0; ret += (150.0 * math.sin(lng / 12.0 * self.pi) + 300.0 * math.sin(lng / 30.0 * self.pi)) * 2.0 / 3.0; return ret
-    def wgs84_to_gcj02(self, lng, lat): dlat = self._transform_lat(lng - 105.0, lat - 35.0); dlng = self._transform_lng(lng - 105.0, lat - 35.0); radlat = lat / 180.0 * self.pi; magic = math.sin(radlat); magic = 1 - self.ee * magic * magic; sqrtmagic = math.sqrt(magic); dlat = (dlat * 180.0) / ((self.a * (1 - self.ee)) / (magic * sqrtmagic) * self.pi); dlng = (dlng * 180.0) / (self.a / sqrtmagic * math.cos(radlat) * self.pi); mglat = lat + dlat; mglng = lng + dlng; return [mglng, mglat]
-    def gcj02_to_bd09(self, lng, lat): z = math.sqrt(lng * lng + lat * lat) + 0.00002 * math.sin(lat * self.x_pi); theta = math.atan2(lat, lng) + 0.000003 * math.cos(lng * self.x_pi); bd_lng = z * math.cos(theta) + 0.0065; bd_lat = z * math.sin(theta) + 0.006; return [bd_lng, bd_lat]
+    def __init__(self): 
+        self.x_pi = 3.14159265358979324 * 3000.0 / 180.0
+        self.pi = 3.1415926535897932384626
+        self.a = 6378245.0
+        self.ee = 0.00669342162296594323
+    
+    def _transform_lat(self, lng, lat): 
+        try:
+            ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
+            ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0
+            ret += (20.0 * math.sin(lat * self.pi) + 40.0 * math.sin(lat / 3.0 * self.pi)) * 2.0 / 3.0
+            ret += (160.0 * math.sin(lat / 12.0 * self.pi) + 320 * math.sin(lat * self.pi / 30.0)) * 2.0 / 3.0
+            return ret
+        except Exception:
+            return 0.0
+    
+    def _transform_lng(self, lng, lat): 
+        try:
+            ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
+            ret += (20.0 * math.sin(6.0 * lng * self.pi) + 20.0 * math.sin(2.0 * lng * self.pi)) * 2.0 / 3.0
+            ret += (20.0 * math.sin(lng * self.pi) + 40.0 * math.sin(lng / 3.0 * self.pi)) * 2.0 / 3.0
+            ret += (150.0 * math.sin(lng / 12.0 * self.pi) + 300.0 * math.sin(lng / 30.0 * self.pi)) * 2.0 / 3.0
+            return ret
+        except Exception:
+            return 0.0
+    
+    def wgs84_to_gcj02(self, lng, lat): 
+        try:
+            dlat = self._transform_lat(lng - 105.0, lat - 35.0)
+            dlng = self._transform_lng(lng - 105.0, lat - 35.0)
+            radlat = lat / 180.0 * self.pi
+            magic = math.sin(radlat)
+            magic = 1 - self.ee * magic * magic
+            sqrtmagic = math.sqrt(magic)
+            dlat = (dlat * 180.0) / ((self.a * (1 - self.ee)) / (magic * sqrtmagic) * self.pi)
+            dlng = (dlng * 180.0) / (self.a / sqrtmagic * math.cos(radlat) * self.pi)
+            mglat = lat + dlat
+            mglng = lng + dlng
+            return [mglng, mglat]
+        except Exception:
+            return None
+    
+    def gcj02_to_bd09(self, lng, lat): 
+        try:
+            z = math.sqrt(lng * lng + lat * lat) + 0.00002 * math.sin(lat * self.x_pi)
+            theta = math.atan2(lat, lng) + 0.000003 * math.cos(lng * self.x_pi)
+            bd_lng = z * math.cos(theta) + 0.0065
+            bd_lat = z * math.sin(theta) + 0.006
+            return [bd_lng, bd_lat]
+        except Exception:
+            return None
 coord_converter = CoordinateConverter()
 @st.cache_data
 def convert_coords_for_baidu(_df):
@@ -90,9 +136,18 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         if not df_5g_conv.empty:
             for _, r in df_5g_conv.iterrows():
                 try:
-                    lon = r['b_lon']; lat = r['b_lat']
-                    if pd.notna(lon) and pd.notna(lat) and 73 <= lon <= 135 and 18 <= lat <= 53:
-                        heatmap_data_5g.append([lon, lat])  # 只添加经度和纬度，不添加权重
+                    # 检查b_lon和b_lat是否存在且有效
+                    if 'b_lon' not in r or 'b_lat' not in r:
+                        continue
+                    
+                    lon = r['b_lon']
+                    lat = r['b_lat']
+                    
+                    # 检查经纬度是否有效
+                    if pd.notna(lon) and pd.notna(lat) and isinstance(lon, (int, float)) and isinstance(lat, (int, float)):
+                        # 检查经纬度是否在合理范围内
+                        if 73 <= lon <= 135 and 18 <= lat <= 53:
+                            heatmap_data_5g.append([lon, lat])  # 只添加经度和纬度，不添加权重
                 except Exception as e:
                     continue
         
@@ -111,6 +166,10 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
         # 遍历分析结果，为每个小区生成对应类别的扇区
         for _, r in df_4g_vis.iterrows():
             try:
+                # 检查必要的列是否存在
+                if 'b_lon' not in r or 'b_lat' not in r or '方位角' not in r:
+                    continue
+                
                 lon = r['b_lon']
                 lat = r['b_lat']
                 azimuth = r['方位角']
@@ -124,10 +183,15 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                         break
                 
                 # 确保坐标和方位角都是有效数值
-                if pd.notna(lon) and pd.notna(lat) and pd.notna(azimuth):
-                    # 生成扇形多边形，半径500米，角度60度
-                    polygon = create_sector_polygon(lon, lat, azimuth, 500, 60)
-                    sector_polygons_by_category[category].append(polygon)
+                if (pd.notna(lon) and pd.notna(lat) and pd.notna(azimuth) and 
+                    isinstance(lon, (int, float)) and isinstance(lat, (int, float)) and isinstance(azimuth, (int, float))):
+                    # 检查经纬度是否在合理范围内
+                    if 73 <= lon <= 135 and 18 <= lat <= 53:
+                        # 生成扇形多边形，半径500米，角度60度
+                        polygon = create_sector_polygon(lon, lat, azimuth, 500, 60)
+                        # 确保生成的多边形是有效的
+                        if polygon and isinstance(polygon, list) and len(polygon) > 2:
+                            sector_polygons_by_category[category].append(polygon)
             except Exception as e:
                 continue
         
