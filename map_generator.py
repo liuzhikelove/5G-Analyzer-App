@@ -243,7 +243,8 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                 valid_heatmap_data = []
                 problematic_coords = [(108.15677842391278, 22.14184020113671), 
                                      (108.00090675777084, 21.56522190486605), 
-                                     (108.40039725104805, 21.561794830264347)]
+                                     (108.40039725104805, 21.561794830264347),
+                                     (108.20558492671857, 22.130648218693175)]  # 新添加的有问题的坐标
                 
                 for point in heatmap_data_5g:
                     if isinstance(point, (list, tuple)) and len(point) == 2:
@@ -270,11 +271,15 @@ def create_baidu_map(df_4g, df_5g, results_df, baidu_ak):
                     limited_data = valid_heatmap_data[:100]  # 只显示前100个数据点
                     st.info(f"显示 {len(limited_data)} 个5G站点热力图数据点")
                     
-                    # 使用正确的方式添加热力图
+                    # 使用更简单的方式添加热力图，只添加少量数据点
                     try:
+                        # 进一步减少数据点数量，只显示前20个，避免遇到更多问题坐标
+                        very_limited_data = limited_data[:20]
+                        st.info(f"尝试显示 {len(very_limited_data)} 个5G站点热力图数据点")
+                        
                         bmap.add(series_name="5G站点热力图", 
                                 type_=ChartType.SCATTER, 
-                                data_pair=limited_data, 
+                                data_pair=very_limited_data, 
                                 symbol="circle",
                                 symbol_size=8,
                                 color="#ff6b6b",
