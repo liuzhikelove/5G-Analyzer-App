@@ -101,9 +101,12 @@ st.set_page_config(page_title="5G分流分析系统 (Leaflet地图版)", page_ic
 st.sidebar.header("操作面板"); uploaded_4g_file = st.sidebar.file_uploader("1. 上传4G小区工参表 (Excel)", type=['xlsx', 'xls']); uploaded_5g_file = st.sidebar.file_uploader("2. 上传5G小区工参表 (Excel)", type=['xlsx', 'xls'])
 st.sidebar.markdown("---"); st.sidebar.subheader("算法参数"); d_colo = st.sidebar.number_input("共站址距离阈值 (米)", 1, 500, 50); theta_colo = st.sidebar.number_input("共站址方位角偏差阈值 (度)", 1, 180, 30); d_non_colo = st.sidebar.number_input("非共站址搜索半径 (米)", 50, 2000, 300); n_non_colo = st.sidebar.number_input("非共站址5G小区数量阈值 (个)", 1, 10, 1)
 st.sidebar.markdown("---")
+
+# 初始化会话状态
 if 'df_4g_preview' not in st.session_state: st.session_state.df_4g_preview = None; 
 if 'df_5g_preview' not in st.session_state: st.session_state.df_5g_preview = None
-preview_4g_placeholder = st.empty(); preview_5g_placeholder = st.empty()
+if 'search_name' not in st.session_state: st.session_state.search_name = ""
+
 # 加载全部数据用于预览
 if uploaded_4g_file and st.session_state.df_4g_preview is None:
     try:
@@ -119,34 +122,61 @@ if uploaded_5g_file and st.session_state.df_5g_preview is None:
         st.error(f"读取5G文件预览时出错：{e}")
         st.session_state.df_5g_preview = None
 
-with preview_4g_placeholder.container(): display_paginated_dataframe(st.session_state.df_4g_preview, "4G数据预览")
-with preview_5g_placeholder.container(): display_paginated_dataframe(st.session_state.df_5g_preview, "5G数据预览")
+# 显示数据预览
+if st.session_state.df_4g_preview is not None:
+    display_paginated_dataframe(st.session_state.df_4g_preview, "4G数据预览")
+if st.session_state.df_5g_preview is not None:
+    display_paginated_dataframe(st.session_state.df_5g_preview, "5G数据预览")
 
-if st.sidebar.button("🚀 开始分析", type="primary"):
+# 初始化会话状态
+if 'analysis_done' not in st.session_state:
+    st.session_state.analysis_done = False
+if 'search_name' not in st.session_state:
+    st.session_state.search_name = ""
+if 'df_4g' not in st.session_state:
+    st.session_state.df_4g = None
+if 'df_5g' not in st.session_state:
+    st.session_state.df_5g = None
+if 'results_df' not in st.session_state:
+    st.session_state.results_df = None
+
+# 分析和地图显示逻辑
+if st.sidebar.button("🚀 开始分析", type="primary") or st.session_state.analysis_done:
     try:
-        # 检查是否上传了必要的文件
-        if not uploaded_4g_file or not uploaded_5g_file:
-            st.error("请先上传4G和5G小区工参表文件！")
-            st.stop()
+        # 如果还没有完成分析，则执行分析
+        if not st.session_state.analysis_done:
+            # 检查是否上传了必要的文件
+            if not uploaded_4g_file or not uploaded_5g_file:
+                st.error("请先上传4G和5G小区工参表文件！")
+                st.stop()
+            
+            with st.spinner("正在高效加载和验证数据..."):
+                df_4g = load_and_validate_data(uploaded_4g_file, "4G")
+                df_5g = load_and_validate_data(uploaded_5g_file, "5G")
+            
+            # 验证数据量是否合理
+            if len(df_4g) == 0:
+                st.error("4G数据文件中没有有效的数据行！")
+                st.stop()
+            
+            progress_bar = st.progress(0, text="分析准备中...")
+            
+            def update_progress(current, total): 
+                progress_bar.progress(current/total if total>0 else 0, text=f"正在分析: {current}/{total} 条记录...")
+            
+            results_df = analyze_5g_offload(df_4g, df_5g, d_colo, theta_colo, d_non_colo, n_non_colo, update_progress)
+            progress_bar.progress(1.0, text="分析完成！正在准备结果展示...")
+            
+            # 保存数据到会话状态
+            st.session_state.df_4g = df_4g
+            st.session_state.df_5g = df_5g
+            st.session_state.results_df = results_df
+            st.session_state.analysis_done = True
         
-        preview_4g_placeholder.empty(); preview_5g_placeholder.empty()
-        
-        with st.spinner("正在高效加载和验证数据..."):
-            df_4g = load_and_validate_data(uploaded_4g_file, "4G")
-            df_5g = load_and_validate_data(uploaded_5g_file, "5G")
-        
-        # 验证数据量是否合理
-        if len(df_4g) == 0:
-            st.error("4G数据文件中没有有效的数据行！")
-            st.stop()
-        
-        progress_bar = st.progress(0, text="分析准备中..."); 
-        
-        def update_progress(current, total): 
-            progress_bar.progress(current/total if total>0 else 0, text=f"正在分析: {current}/{total} 条记录...")
-        
-        results_df = analyze_5g_offload(df_4g, df_5g, d_colo, theta_colo, d_non_colo, n_non_colo, update_progress)
-        progress_bar.progress(1.0, text="分析完成！正在准备结果展示...")
+        # 从会话状态中获取数据
+        df_4g = st.session_state.df_4g
+        df_5g = st.session_state.df_5g
+        results_df = st.session_state.results_df
         
         # 显示分析结果，无论地图是否可用
         st.markdown("---"); st.subheader("📊 详细分析结果")
@@ -167,7 +197,30 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
         with col4: st.metric("非共站址5G分流小区", non_colo_offload)
         with col5: st.metric("需要5G规划建设小区", need_construction)
         
-        # 生成Leaflet地图
+        # 添加地图搜索功能
+        st.markdown("---")
+        st.markdown("### 🔍 地图搜索")
+        
+        # 使用表单来处理搜索，确保地图会重新生成
+        with st.form(key='search_form'):
+            # 添加搜索输入框
+            map_search_name = st.text_input(
+                "请输入小区名称在地图上搜索：", 
+                value=st.session_state.search_name
+            )
+            
+            # 添加搜索按钮
+            search_submitted = st.form_submit_button("🔍 在地图上搜索")
+            
+            # 当用户点击搜索按钮时，更新会话状态
+            if search_submitted:
+                st.session_state.search_name = map_search_name
+        
+        # 显示搜索状态
+        if st.session_state.search_name:
+            st.info(f"正在搜索包含 '{st.session_state.search_name}' 的小区...")
+        
+        # 生成Leaflet地图（统一的地图显示）
         st.markdown("---"); st.subheader("🗺️ Leaflet地图可视化结果")
         
         # 添加地图生成进度提示
@@ -182,8 +235,8 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
             map_progress.progress(50)
             map_progress.text("正在处理数据...")
             
-            # 调用地图生成函数，使用所有数据
-            map_error = create_folium_map(df_4g, df_5g, results_df, None)
+            # 调用地图生成函数，传递搜索名称
+            map_error = create_folium_map(df_4g, df_5g, results_df, None, st.session_state.search_name)
             
             map_progress.progress(100)
             map_progress.text("地图生成完成！")
@@ -220,6 +273,8 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
                 stats_sheet.append(row)
         
         st.download_button("📥 下载分析结果", output.getvalue(), "5G分流分析结果.xlsx", "application/vnd.ms-excel")
+            
+
         
     except ValueError as e:
         st.error(f"**数据加载或格式错误！**\n\n**错误详情**: {e}")
@@ -229,3 +284,4 @@ if st.sidebar.button("🚀 开始分析", type="primary"):
     except Exception as e:
         st.error(f"**分析过程中出现意外错误！**\n\n**错误详情**: {type(e).__name__}: {e}")
         st.info("常见原因：\n1. 数据格式问题（如'经度'或'纬度'列包含非数字内容）\n2. 文件损坏或格式不正确\n3. 百度地图AK配置问题")
+        
