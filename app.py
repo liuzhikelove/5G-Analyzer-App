@@ -72,10 +72,7 @@ def load_and_validate_data(uploaded_file, file_type):
         if df['小区名称'].isnull().any():
             raise ValueError(f"{file_type}文件中的'小区名称'列包含空值！")
         
-        # 验证小区名称唯一性
-        if df['小区名称'].duplicated().any():
-            duplicate_count = df['小区名称'].duplicated().sum()
-            raise ValueError(f"{file_type}文件中的'小区名称'列包含{duplicate_count}个重复值！小区名称必须唯一。")
+
         
         return df
     except ValueError as ve:
