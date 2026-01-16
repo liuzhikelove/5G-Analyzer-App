@@ -5,6 +5,7 @@ import math
 from algorithms import create_sector_polygon
 import folium
 from streamlit_folium import folium_static
+import streamlit.components.v1 as components
 
 @st.cache_data
 def convert_coords_for_folium(_df):
@@ -83,63 +84,30 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
             center_lon = 108.380886
             center_lat = 22.825828
         
-        # 创建地图对象
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=14, width="100%", height="1200px")
+        # 创建地图对象，使用国内可用的高德地图瓦片
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=12,
+            control_scale=True,
+            prefer_canvas=True,
+            tiles=None  # 不使用默认瓦片
+        )
+        
+        # 添加高德地图瓦片图层（国内可用）
+        folium.TileLayer(
+            name='高德地图',
+            tiles='https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+            attr='高德地图',
+            subdomains='1234',
+            max_zoom=19,
+            show=True
+        ).add_to(m)
         
         # 颜色映射
         color_map = {'共站址5G分流小区': '#28a745','共站址5G射频调优小区': '#ffc107','非共站址5G分流小区': '#17a2b8','5G规划建设': '#dc3545','其他': '#6c757d'}
         
-        # 按分析结果分类生成扇区多边形
-        sector_polygons_by_category = {category: [] for category in categories.keys()}
-        
-        # 遍历分析结果，为每个小区生成对应类别的扇区
-        polygon_count = 0
-        for _, r in df_4g_vis.iterrows():
-            try:
-                # 检查必要的列是否存在
-                if '经度' not in r or '纬度' not in r or '方位角' not in r:
-                    continue
-                
-                lon = r['经度']
-                lat = r['纬度']
-                azimuth = r['方位角']
-                analysis_result = r.get('分析结果', '')
-                
-                # 确定小区所属类别
-                category = '其他'  # 默认类别
-                for cat_key in categories.keys():
-                    if cat_key in analysis_result:
-                        category = cat_key
-                        break
-                
-                # 确保坐标和方位角都是有效数值
-                if (pd.notna(lon) and pd.notna(lat) and pd.notna(azimuth)):
-                    # 转换为数值类型，确保方位角是有效的
-                    try:
-                        lon = float(lon)
-                        lat = float(lat)
-                        azimuth = float(azimuth)
-                    except (TypeError, ValueError):
-                        continue
-                    
-                    # 检查经纬度是否在合理范围内
-                    if 73 <= lon <= 135 and 18 <= lat <= 53:
-                        # 生成扇形多边形，半径500米，角度60度
-                        polygon = create_sector_polygon(lon, lat, azimuth, 500, 60)
-                        # 确保生成的多边形是有效的
-                        if polygon and isinstance(polygon, list) and len(polygon) > 2:
-                            sector_polygons_by_category[category].append(polygon)
-                            polygon_count += 1
-            except Exception as e:
-                continue
-        
-        # 显示生成的扇区多边形数量
-        st.info(f"成功生成 {polygon_count} 个扇区多边形")
-        
-        # 为每个类别显示扇区数量
-        for category, polygons in sector_polygons_by_category.items():
-            if polygons:
-                st.info(f"{category}: {len(polygons)} 个扇区多边形")
+        # 显示数据统计信息
+        st.info(f"成功处理 {len(df_4g_conv)} 个4G小区，{len(df_5g_conv)} 个5G小区")
         
         # 添加5G站点标记
         if g5_stations:
@@ -371,9 +339,6 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
                 HeatMap(heatmap_data, radius=15, blur=10).add_to(heat_layer)
                 heat_layer.add_to(m)
         
-        # 添加图层控制
-        folium.LayerControl().add_to(m)
-        
         # 添加标题
         folium.map.Marker(
             [center_lat, center_lon],
@@ -384,50 +349,76 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak):
             )
         ).add_to(m)
         
-        # 显示地图
-        st.success("地图生成成功！")
-        # 添加自定义CSS来确保地图容器能显示更大尺寸，突破所有宽度限制
+        # 添加图层控制
+        folium.LayerControl().add_to(m)
+        
+        # 添加必要的CSS样式来确保地图容器正确显示
         st.markdown("""
         <style>
+        /* 全局样式重置 */
+        * {
+            box-sizing: border-box;
+        }
+        
+        /* Streamlit 主容器样式 */
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            padding-left: 2rem;
+            padding-right: 2rem;
+            max-width: 100% !important;
+        }
+        
         /* 地图容器样式 */
-        .folium-map {
+        .map-container {
+            width: 100% !important;
+            height: 100% !important;
+            position: relative;
+        }
+        
+        /* Leaflet 地图容器 */
+        .leaflet-container {
             width: 100% !important;
             height: 1200px !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            max-width: 100% !important;
-            box-sizing: border-box !important;
         }
         
-        /* Streamlit 容器样式 */
-        .st-bw, .st-bx, .st-eh, .st-ei, .st-eg, .st-dh {
-            width: 100% !important;
-            max-width: 100% !important;
-            padding: 0 !important;
-            margin: 0 !important;
-        }
-        
-        /* 主内容区域样式 */
-        .main .block-container {
-            max-width: 100% !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-        }
-        
-        /* 确保iframe容器也能正确显示 */
+        /* iframe 样式 */
         iframe {
             width: 100% !important;
+            height: 1200px !important;
+            border: none !important;
             max-width: 100% !important;
         }
         
-        /* 地图父容器样式 */
-        div[data-testid="stMarkdownContainer"] > div {
+        /* 确保地图占据整个容器 */
+        .st-folium {
             width: 100% !important;
-            max-width: 100% !important;
+            height: 1200px !important;
         }
         </style>
         """, unsafe_allow_html=True)
-        folium_static(m, height=1200, width=1600)
+        
+        # 显示地图
+        st.success("地图生成成功！")
+        
+        # 使用iframe方式显示地图，确保底图正确加载
+        import tempfile
+        import os
+        
+        # 保存地图为HTML文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+            m.save(f.name)
+            map_path = f.name
+        
+        # 使用Streamlit的iframe组件显示地图
+        with open(map_path, 'r', encoding='utf-8') as f:
+            map_html = f.read()
+        
+        # 显示地图
+        components.html(map_html, width=1600, height=1200, scrolling=False)
+        
+        # 删除临时文件
+        os.unlink(map_path)
         
         return None
     except Exception as e:
