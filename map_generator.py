@@ -291,6 +291,7 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak, search_name=None):
                     lon = r.get('经度', None)
                     lat = r.get('纬度', None)
                     azimuth = r.get('方位角', 0)
+                    # 获取原始5G小区名称，不进行任何修改
                     cell_name = r.get('小区名称', f"5G小区_{idx}")
                     
                     if pd.notna(lon) and pd.notna(lat):
@@ -300,15 +301,17 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak, search_name=None):
                         # 添加扇区到图层
                         folium.Polygon(
                             locations=sector_polygon,
-                            color='#0000FF',  # 蓝色，醒目
+                            color='#FF00FF',  # 改用紫色，与4G小区明显区分
                             fill=True,
-                            fill_color='#0000FF',
+                            fill_color='#FF00FF',
                             fill_opacity=0.5,  # 适当降低透明度
-                            weight=1,  # 减少边框宽度
-                            # 放大tooltip字体大小
+                            weight=2,  # 增加边框宽度，更醒目
+                            # 放大tooltip字体大小，明确显示5G小区类型
                             tooltip=folium.Tooltip(
-                                f"<div style='font-size: 14px; font-weight: bold;'>5G小区: {cell_name}</div><div style='font-size: 12px;'>方位角: {azimuth}°</div>",
-                                sticky=True
+                                f"<div style='font-size: 14px; font-weight: bold; color: purple;'>📱 5G小区: {cell_name}</div><div style='font-size: 12px;'>方位角: {azimuth}°</div>",
+                                sticky=True,
+                                # 自定义tooltip样式
+                                style="background-color: white; color: purple; border: 2px solid purple; padding: 10px; border-radius: 5px;"
                             )
                         ).add_to(sector_layer_5g)
                 except Exception as e:
