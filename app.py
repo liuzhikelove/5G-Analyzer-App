@@ -236,21 +236,25 @@ if st.sidebar.button("🚀 开始分析", type="primary") or st.session_state.an
             map_progress.text("正在处理数据...")
             
             # 调用地图生成函数，传递搜索名称
-            map_error = create_folium_map(df_4g, df_5g, results_df, None, st.session_state.search_name)
+            map_obj = create_folium_map(df_4g, df_5g, results_df, None, st.session_state.search_name)
             
             map_progress.progress(100)
             map_progress.text("地图生成完成！")
             
             # 显示地图生成结果
-            if map_error and isinstance(map_error, str):
-                if "没有有效" in map_error:
-                    st.warning(map_error)
-                elif "地图生成过程中出错" in map_error:
-                    st.error(map_error)
-                else:
-                    st.error(f"地图生成错误：{map_error}")
+            if isinstance(map_obj, str) and "地图生成过程中出错" in map_obj:
+                st.error(map_obj)
+            elif isinstance(map_obj, str) and "没有有效" in map_obj:
+                st.warning(map_obj)
+            else:
+                # 使用folium_static显示地图对象
+                from streamlit_folium import folium_static
+                folium_static(map_obj, width=1600, height=1200)
         except Exception as e:
             st.error(f"地图生成过程中出错：{e}")
+            # 显示详细的错误信息
+            import traceback
+            st.code(traceback.format_exc())
         finally:
             # 清理进度条
             map_progress.empty()
