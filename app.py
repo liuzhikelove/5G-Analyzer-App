@@ -247,7 +247,7 @@ if st.sidebar.button("🚀 开始分析", type="primary") or st.session_state.an
             elif isinstance(map_obj, str) and "没有有效" in map_obj:
                 st.warning(map_obj)
             else:
-                # 使用folium_static显示地图对象
+                # 使用folium_static显示地图对象，还原为之前的尺寸
                 from streamlit_folium import folium_static
                 folium_static(map_obj, width=1600, height=1200)
         except Exception as e:
