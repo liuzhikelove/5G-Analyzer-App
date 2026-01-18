@@ -120,13 +120,13 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak, search_name=None):
         df_4g_conv = convert_coords_for_folium(df_4g)
         df_5g_conv = convert_coords_for_folium(df_5g)
         
-        # 3. 初始化地图 - 使用OpenStreetMap底图，设置合适的缩放级别
+        # 3. 初始化地图 - 使用更清晰的OpenStreetMap底图，设置合适的缩放级别
         m = folium.Map(
             location=[22.8170, 108.3661],  # 南宁市中心坐标
             zoom_start=12,
             control_scale=True,
-            tiles='OpenStreetMap',  # 使用OpenStreetMap底图，确保放大后能看到清晰的街景
-            max_zoom=20  # 设置最大缩放级别为20，允许用户放大查看清晰的街景
+            tiles='OpenStreetMap',  # 使用OpenStreetMap底图，确保能显示清晰的街景
+            max_zoom=19  # 设置最大缩放级别为19，这是OpenStreetMap的实际最大缩放级别
         )
         
         # 4. 创建图层 - 按照要求创建所有需要的图层
@@ -309,7 +309,7 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak, search_name=None):
         layer_noncolo_offload.add_to(m)
         layer_need_construction.add_to(m)
         
-        # 10. 添加固定图例 - 使用简单可靠的方法，确保能显示
+        # 10. 添加固定图例 - 使用folium.map.CustomControl，将图例固定在左上角
         try:
             # 确保所有图层都有数据，即使是空的也添加一个隐藏的点
             # 这样LayerControl中就能显示所有图层选项
@@ -332,18 +332,14 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak, search_name=None):
             ensure_layer_has_data(layer_noncolo_offload, color_map['非共站址5G分流小区'])
             ensure_layer_has_data(layer_need_construction, color_map['需要5G规划建设小区'])
             
-            # 使用简单的HTML字符串添加图例
+            # 使用简单的HTML字符串创建图例内容
             legend_html = '''
-            <div style="position: absolute;
-                        top: 10px;
-                        left: 10px;
-                        background-color: white;
+            <div style="background-color: white;
                         border: 2px solid grey;
                         border-radius: 5px;
                         padding: 10px;
                         font-family: Arial, sans-serif;
-                        font-size: 12px;
-                        z-index: 1000;">
+                        font-size: 12px;">
                 <b>图例说明</b><br>
                 <div style="display: flex; align-items: center; margin: 5px 0;">
                     <div style="width: 12px; height: 12px; background-color: #336699; margin-right: 8px;"></div>
@@ -372,16 +368,29 @@ def create_folium_map(df_4g, df_5g, results_df, baidu_ak, search_name=None):
             </div>
             '''
             
-            # 使用folium.plugins的CustomControl添加固定图例
+            # 使用folium.map.CustomControl添加固定图例，确保图例固定在地图左上角
             from folium.plugins import FloatImage
-            from folium.element import Element
-            
-            # 将图例HTML直接添加到地图的HTML中
-            m.get_root().html.add_child(Element(legend_html))
+            from folium.map import CustomControl
+            CustomControl(
+                html=legend_html,
+                position='topleft'
+            ).add_to(m)
         except Exception as e:
             logger.error(f"添加图例失败: {e}")
-            # 如果添加图例失败，至少确保地图能显示
-            pass
+            # 如果添加图例失败，尝试使用Marker+DivIcon作为备选方案
+            try:
+                folium.Marker(
+                    location=[22.8170, 108.3661],
+                    icon=folium.DivIcon(
+                        html=legend_html,
+                        icon_size=(200, None),
+                        icon_anchor=(0, 0)
+                    ),
+                    draggable=False
+                ).add_to(m)
+            except Exception as e2:
+                logger.error(f"备选方案添加图例失败: {e2}")
+                pass
         
         # 11. 添加图层控制 - 确保所有图层都能被控制
         # 重新创建LayerControl，确保它能正确控制所有图层
